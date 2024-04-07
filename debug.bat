@@ -1,23 +1,23 @@
 @echo off
 
-rem 激活 Conda 环境
+rem Activate Conda environment
 call activate chat
 
-rem 设置环境变量
+rem Set environment variable
 set LOCAL=True
 
-rem 启动服务器
+rem Start the server
 start cmd /k python ./server/server.py
 
-rem 等待一段时间，确保服务器已经启动
+rem Wait for a while to ensure the server has started
 timeout /t 2 >nul
 
-rem 启动客户端
-@REM start cmd /k python ./client/client.py
-start pythonw /chatapp/client.py
+rem Start the client
+rem start pythonw /chatapp/client.py
+start cmd /k python ./client/client.py
 
-rem 关闭窗口前，等待用户按下任意键
+rem Wait for the user to press any key before closing the window
 pause >nul
 
-rem 关闭 Conda 环境
+rem Deactivate the Conda environment
 call deactivate

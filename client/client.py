@@ -109,10 +109,7 @@ class DeleteAccountPage(QWidget):
     def delete_account(self):
         username = self.username_entry.text()
         password = self.password_entry.text()
-
-
-
-
+        
         confirmation, ok = QInputDialog.getText(self, "Confirmation", "Type 'DELETE' to confirm account deletion:", QLineEdit.Normal, "")
         
         if ok and confirmation == 'DELETE':
