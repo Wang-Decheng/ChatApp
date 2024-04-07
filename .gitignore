@@ -1,0 +1,8 @@
+# 忽略 Python 编译文件
+*.pyc
+
+# 忽略 Python 缓存文件夹
+__pycache__
+
+# 忽略数据库文件
+*.db

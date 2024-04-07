@@ -1,11 +1,13 @@
 import sqlite3
-import hashlib
 import socket
 import json
+import sys
 import bcrypt
 from threading import Thread
 import os
-from ..utils import utils
+
+sys.path.append(".")
+from utils import Utils
 
 class UserManager:
     # 单例模式
@@ -26,64 +28,49 @@ class UserManager:
         ''')
         self.conn.commit()
     
-    def register_user(self, username, password):
-        if(not utils._is_valid_username(username)):
-            return False, 'Invalid Username'
-        if(len(password) < 1): return False, 'Invalid Password'
-        self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        existing_user = self.cursor.fetchone()
-        if existing_user:
-            return False, 'Username already exists'
-        
-        password_hash = utils._hash_password(password)
-        self.cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username, password_hash))
-        self.conn.commit()
-        return True, 'User registered successfully'
+    def _validate_credentials(self, username, password, register = False):
+        success, message = Utils.is_valid_username_then_password(username, password)
+        if success:
+            self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+            user = self.cursor.fetchone()
+            if user is None:
+                if not register:
+                    success, message = False, 'USER_NOT_EXIST'
+            elif not register:
+                stored_password_hash = user[1]
+                if not bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
+                    success, message = False, 'WRONG_PASSWORD'
+            else:
+                success, message = False, 'USER_HAS_EXIST'
+        return success, message
 
-    def validate_credentials(self, username, password):
-        if not utils._is_valid_username(username):
-            return False, 'Invalid Username'
-        if not utils._is_valid_password(password):
-            return False, 'Invalid Password'
-        self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        user = self.cursor.fetchone()
-        if user:
-            stored_password_hash = user[1]
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
-                return True, 'Credentials valid'
-        return False, 'Invalid credentials'
+    def register_user(self, username, password):
+        success, message  = self._validate_credentials(username, password, True)
+        message = Utils.sys_msg_to_user_msg(message)
+        if success:
+            password_hash = Utils.hash_password(password)
+            self.cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username, password_hash))
+            self.conn.commit()
+            message = 'User registered successfully'
+        return success, message 
 
     def login_user(self, username, password):
-        if(not utils._is_valid_username(username)):
-            return False, 'Invalid Username'
-        if(len(password) < 1): return False, 'Invalid Password'
-        self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        user = self.cursor.fetchone()
-        if user:
-            stored_password_hash = user[1]
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
-                return True, 'Login successful'
-        else:
-            return False, 'User not exist'
-        return False, 'Wrong Password'
+        success, message = self._validate_credentials(username, password)
+        message = Utils.sys_msg_to_user_msg(message) 
+        if success:
+            message = 'Login successful!'
+            #此处为登录逻辑
+        return success, message
 
     def delete_account(self, username, password):
-        if(not utils._is_valid_username(username)):
-            return False, 'Invalid Username'
-        if(len(password) < 1): return False, 'Invalid Password'
-        self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        user = self.cursor.fetchone()
-        if user:
-            stored_password_hash = user[1]
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
-                self.cursor.execute('DELETE FROM users WHERE username = ?', (username,))
-                self.conn.commit()
-                return True, 'Account deleted successfully'
-        else:
-            return False, 'User not exist'
-        return False, 'Wrong Password'
-    # def check_username_then_password(username, password)
-    #     if(not utils._is_valid_username)return 
+        success, message = self._validate_credentials(username, password)
+        message = Utils.sys_msg_to_user_msg(message)
+        if success:
+            self.cursor.execute('DELETE FROM users WHERE username = ?', (username,))
+            self.conn.commit()
+            message = 'Account deleted successfully'
+        return success, message
+    
     def close_connection(self):
         self.conn.close()
 

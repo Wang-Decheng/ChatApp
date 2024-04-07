@@ -4,7 +4,9 @@ from PyQt5.QtCore import Qt
 import socket
 import json
 import os
-from ..utils import utils
+
+sys.path.append(".")
+import utils
 
 
 class ChatClient(QMainWindow):
@@ -115,7 +117,7 @@ class DeleteAccountPage(QWidget):
         
         if ok and confirmation == 'DELETE':
             parent_client = self.parent().parent()
-            success, message = parent_client.send_request({'action': 'delete_account', 'password': password})
+            success, message = parent_client.send_request({'action': 'delete_account', 'username': username, 'password': password})
             if success:
                 QMessageBox.information(self, "Success", message)
             else:
