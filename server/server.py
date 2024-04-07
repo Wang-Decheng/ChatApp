@@ -114,15 +114,6 @@ class Server:
             client_handler.start()
 
 if __name__ == '__main__':
-    ''' 如何设置环境变量
-    Linux:
-        export LOCAL=True
-    Windows:
-        临时环境变量
-            set LOCAL True
-        持久环境变量
-            setx LOCAL True
-    '''
     if os.environ.get('LOCAL') == 'True':
         ip_address = '127.0.0.1'
     else:

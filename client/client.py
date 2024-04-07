@@ -73,7 +73,8 @@ class ChatClient(QMainWindow):
         if not username.strip() or not password.strip():
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
-        self.send_request({'action': 'register', 'username': username, 'password': password})
+        if self.send_request({'action': 'register', 'username': username, 'password': password}):
+            self.show_main_page()
 
     def login_user(self):
         username = self.login_page.username_entry.text()
