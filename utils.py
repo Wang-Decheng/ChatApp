@@ -9,17 +9,18 @@ class Utils:
         return cls._instance
     # 系统错误信息到用户错误信息反馈的词典
     # 此词典存在的原因是对响应消息进行统一管理，避免出现响应相同相同却不一致的消息等冗余或错误信息，避免响应消息混乱
-    # 对于一对多的响应消息如 OK,不统一处理
+    # 对于一对多的响应消息如 OK,保持原状，不统一处理，在对应的位置单独处理
     msg_dict = {
-        "TOO_SHORT_USERNAME": "Username is too short",
-        "TOO_LONG_USERNAME": "Username is too long",
-        "HEAD_NOT_NUM": "The first character of username should be a letter",
-        "INCLUDE_NOT_ASCII_CHAR" : "Username has invald characters",
-        "TOO_SHORT_PASSWORD": "Password is too short",
-        "TOO_LONG_PASSWORD": "Password is too long",
-        "USER_NOT_EXIST": "User is not exist",
-        "WRONG_PASSWORD": "The password is wrong",
-        "USER_HAS_EXIST": "Username already exists"
+        'TOO_SHORT_USERNAME': 'Username is too short',
+        'TOO_LONG_USERNAME': 'Username is too long',
+        'HEAD_NOT_NUM': 'The first character of username should be a letter',
+        'INCLUDE_NOT_ASCII_CHAR': 'Username has invald characters',
+        'TOO_SHORT_PASSWORD': 'Password is too short',
+        'TOO_LONG_PASSWORD': 'Password is too long',
+        'USER_NOT_EXIST': 'User is not exist',
+        'WRONG_PASSWORD': 'The password is wrong',
+        'USER_HAS_EXIST': 'Username already exists',
+        'OK': 'OK'
     }
 
     def is_valid_username(username):
