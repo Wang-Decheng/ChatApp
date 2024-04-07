@@ -96,7 +96,6 @@ class ChatClient(QMainWindow):
         if confirmation == QMessageBox.Yes:
             if self.send_request({'action': 'delete_account', 'username': username, 'password': password}):
                 self.show_main_page()
-
     def send_request(self, request_data):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
@@ -112,6 +111,7 @@ class ChatClient(QMainWindow):
                     QMessageBox.critical(self, "Error", error_message)
                 return response_data['success']
             except Exception as e:
+                print(4)
                 QMessageBox.critical(self, "Error", str(e))
     @staticmethod
     def clear_text(widget):

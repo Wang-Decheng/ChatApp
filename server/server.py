@@ -62,7 +62,6 @@ class UserManager:
         message = Utils.sys_msg_to_user_msg(message) 
         if success:
             message = 'Login successful!'
-            self.online_users.append(username)
         return success, message
 
     def delete_account(self, username, password):
@@ -78,67 +77,99 @@ class UserManager:
         self.conn.close()
 
 class Server:
-    def __init__(self, host, port):
+    def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
         self.host = host
         self.port = port
-        self.heartbeat_interval = 10  # 心跳包发送间隔（秒）
-        self.timeout = 30  # 心跳包超时时间（秒）
+        self.heartbeat_interval = heartbeat_interval  # 心跳包发送间隔（秒）
+        self.timeout = timeout  # 心跳包超时时间（秒）
         self.user_manager = UserManager()
     
     def handle_client(self, client_socket, client_address):
         last_heartbeat_time = datetime.now()
+        username = None
         while True:
             try:
                 request = client_socket.recv(1024).decode('utf-8')
             except socket.error:
-                print(f"Connection with {client_address} is closed.")
+                logging.info(f"Connection with {client_address} is closed.")
                 break
             if request:
                 request_data = json.loads(request)
+                action = request_data.get('action')
                 response = {}
-
-                if request_data.get('action') == 'register':
-                    username = request_data.get('username')
-                    password = request_data.get('password')
-                    success, message = self.user_manager.register_user(username, password)
-                    response['success'] = success
-                    response['message'] = message
-                elif request_data.get('action') == 'login':
-                    username = request_data.get('username')
-                    password = request_data.get('password')
-                    success, message = self.user_manager.login_user(username, password)
-                    response['success'] = success
-                    response['message'] = message
-                elif request_data.get('action') == 'delete_account':
-                    username = request_data.get('username')
-                    password = request_data.get('password')
-                    success, message = self.user_manager.delete_account(username, password)
-                    response['success'] = success
-                    response['message'] = message
-                elif request_data.get('action') == 'send_message':
-                    content = request_data.get('content')
-                    sender = request_data.get('sender')
-                    receiver = request_data.get('receiver')
-                    send_time = request_data.get('send_time')
-                    success, message = self.send_message(content, sender, receiver, send_time)
-                    response['success'] = success
-                    response['message'] = message
+                if action == 'register':
+                    response = self.handle_register(request_data)
+                elif action == 'login':
+                    response = self.handle_login(request_data)
+                elif action == 'delete_account':
+                    response = self.handle_delete_account(request_data)
+                elif action == 'send_message':
+                    response = self.handle_send_message(request_data)
                 client_socket.send(json.dumps(response).encode('utf-8'))
+
+                if action == 'register' or action == 'delete_account':
+                    break
+                else:
+                    username = request_data.get('username')
+                    self.user_manager.online_users[username] = client_socket
+                
             else:
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
-                    logging.debug(f"Heartbeat timeout with {client_address}.")
+                    logging.info(f"Heartbeat timeout with {client_address}.")
                     break
+
             # 发送心跳包
             if (datetime.now() - last_heartbeat_time).total_seconds() > self.heartbeat_interval:
                 logging.debug(f"Sending heartbeat to {client_address}...")
                 client_socket.sendall("heartbeat".encode('utf-8'))
                 last_heartbeat_time = datetime.now()
-        # 客户端断开连接，关闭套接字并从在线用户列表中移除
-        self.user_manager.close_connection(client_address)
+        if username:
+            if username in self.user_manager.online_users:
+                del self.user_manager.online_users[username]
         client_socket.close()
-    def send_message(content, sender, receiver, send_time):
-        pass
+    
+    
+    def handle_register(self, request_data):
+        username = request_data.get('username')
+        password = request_data.get('password')
+        success, message = self.user_manager.register_user(username, password)
+        return {"success": success, "message": message}
 
+    def handle_login(self, request_data):
+        username = request_data.get('username')
+        password = request_data.get('password')
+        success, message = self.user_manager.login_user(username, password)
+        return {"success": success, "message": message}
+
+    def handle_delete_account(self, request_data):
+        username = request_data.get('username')
+        password = request_data.get('password')
+        success, message = self.user_manager.delete_account(username, password)
+        return {"success": success, "message": message}
+
+    def handle_send_message(self, request_data):
+        content = request_data.get('content')
+        sender = request_data.get('username')
+        receiver = request_data.get('receiver')
+        send_time = request_data.get('send_time')
+        success, message = self.send_message(content, sender, receiver, send_time)
+        return {"success": success, "message": message}
+    
+    def send_message(self, content, sender, receiver, send_time):
+        if receiver in self.user_manager.online_users:
+            receiver_socket = self.user_manager.online_users[receiver]
+            message_data = {
+                'content': content,
+                'sender': sender,
+                'send_time': send_time
+            }
+            message_json = json.dumps(message_data)
+            receiver_socket.sendall(message_json.encode('utf-8'))
+            return True, 'Message sent successfully'
+        else:
+            return False, 'Receiver is not online'
+
+    
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
