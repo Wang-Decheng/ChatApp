@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QDialog, QLabel, QLineEdi
 from PyQt5.QtCore import Qt
 import socket
 import json
+import os
 
 class ChatClient(QMainWindow):
     def __init__(self, host, port):
@@ -121,9 +122,20 @@ class DeleteAccountPage(QWidget):
             QMessageBox.information(self, "Confirmation", "Account deletion canceled.")
 
 if __name__ == '__main__':
-    # domain_name = "wdc.zone"
-    # ip_address = socket.gethostbyname(domain_name)
-    ip_address = locals
+    ''' 如何设置环境变量
+    Linux:
+        export LOCAL=True
+    Windows:
+        临时环境变量
+            set LOCAL True
+        持久环境变量
+            setx LOCAL True
+    '''
+    if os.environ.get('LOCAL') == 'True':
+        ip_address = '127.0.0.1'
+    else:
+        domain_name = "wdc.zone"
+        ip_address = socket.gethostbyname(domain_name)
     app = QApplication(sys.argv)
     client = ChatClient(ip_address, 9999)
     client.show()

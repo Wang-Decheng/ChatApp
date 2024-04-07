@@ -4,6 +4,7 @@ import socket
 import json
 import bcrypt
 from threading import Thread
+import os
 
 class UserManager:
     # 单例模式
@@ -129,7 +130,18 @@ class Server:
             client_handler.start()
 
 if __name__ == '__main__':
-    # ip_address = '172.31.238.211'
-    ip_address = locals
+    ''' 如何设置环境变量
+    Linux:
+        export LOCAL=True
+    Windows:
+        临时环境变量
+            set LOCAL True
+        持久环境变量
+            setx LOCAL True
+    '''
+    if os.environ.get('LOCAL') == 'True':
+        ip_address = '127.0.0.1'
+    else:
+        ip_address = '172.31.238.212'
     server = Server(ip_address, 9999)
     server.start()
