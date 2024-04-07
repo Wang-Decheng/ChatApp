@@ -121,8 +121,9 @@ class DeleteAccountPage(QWidget):
             QMessageBox.information(self, "Confirmation", "Account deletion canceled.")
 
 if __name__ == '__main__':
-    domain_name = "wdc.zone"
-    ip_address = socket.gethostbyname(domain_name)
+    # domain_name = "wdc.zone"
+    # ip_address = socket.gethostbyname(domain_name)
+    ip_address = locals
     app = QApplication(sys.argv)
     client = ChatClient(ip_address, 9999)
     client.show()

@@ -129,6 +129,7 @@ class Server:
             client_handler.start()
 
 if __name__ == '__main__':
-    ip_address = '172.31.238.211'
+    # ip_address = '172.31.238.211'
+    ip_address = locals
     server = Server(ip_address, 9999)
     server.start()
