@@ -1,7 +1,7 @@
 import bcrypt
 
 class Utils:
-
+    #123
     _instance = None    
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
