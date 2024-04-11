@@ -1,28 +1,7 @@
 import bcrypt
+import time
 
 class Utils:
-
-    _instance = None    
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    # 系统错误信息到用户错误信息反馈的词典
-    # 此词典存在的原因是对响应消息进行统一管理，避免出现响应相同相同却不一致的消息等冗余或错误信息，避免响应消息混乱
-    # 对于一对多的响应消息如 OK,保持原状，不统一处理，在对应的位置单独处理
-    msg_dict = {
-        'TOO_SHORT_USERNAME': 'Username is too short',
-        'TOO_LONG_USERNAME': 'Username is too long',
-        'HEAD_NOT_NUM': 'The first character of username should be a letter',
-        'INCLUDE_NOT_ASCII_CHAR': 'Username has invald characters',
-        'TOO_SHORT_PASSWORD': 'Password is too short',
-        'TOO_LONG_PASSWORD': 'Password is too long',
-        'USER_NOT_EXIST': 'User is not exist',
-        'WRONG_PASSWORD': 'The password is wrong',
-        'USER_HAS_EXIST': 'Username already exists',
-        'OK': 'OK'
-    }
-
     def is_valid_username(username):
         '''用户名合法性检测：
         检查用户名长度和字符范围
@@ -32,13 +11,13 @@ class Utils:
         minlen = 3
         maxlen = 20
         if len(username) < minlen:
-            return False, 'TOO_SHORT_USERNAME'
+            return False, 'Username is too short'
         elif len(username) > maxlen:
-            return False, 'TOO_LONG_USERNAME'
+            return False, 'Username is too long'
         if not username[0].isalpha():
-            return False, 'HEAD_NOT_NUM'
+            return False, 'The first character of username should be a letter'
         if not all(ord(char) >= 32 and ord(char) < 127 for char in username):
-            return False, 'INCLUDE_NOT_ASCII_CHAR'
+            return False, 'Username has invald characters'
         return True, 'OK'
     
     def hash_password(password):
@@ -50,20 +29,92 @@ class Utils:
         minlen = 3
         maxlen = 16
         if len(password) < minlen:
-            return False, 'TOO_SHORT_PASSWORD'
+            return False, 'Password is too short'
         elif len(password) > maxlen:
-            return False, 'TOO_LONG_PASSWORD'
+            return False, 'Password is too long'
         return True, 'OK'
     
     def is_valid_username_then_password(username, password):
         success, message = Utils.is_valid_username(username)
         if success:
             success, message = Utils.is_valid_password(password)
-        return success, message
+        return success, message 
+
+class MessageBuilder:
     
-    def sys_msg_to_user_msg(message):
-        if message in Utils.msg_dict:
-            return Utils.msg_dict[message]
-        else:
-            print("undefined message: " + message)
-            return message
+    # 生成响应信息
+    @staticmethod
+    def build_response(success, message):
+        message_data = {
+                'type': 'response',
+                'success': success,
+                'message': message
+            }
+        return message_data
+    
+    # 生成心跳包
+    @staticmethod
+    def build_heartbeat(who):
+        message_data = {
+                'type': 'heartbeat',
+                'who': who,
+                'timestamp': time.time()
+            }
+        return message_data
+    
+    # region 生成请求消息
+    # 根据请求内容生成请求
+    @staticmethod
+    def __build_request(action, request_data):
+        message_data = {
+                'type': 'request',
+                'action': action,
+                'request_data': request_data
+            }
+        return message_data
+    
+    # 根据请求类型地不同生成不同的请求内容对象，然后生成请求信息，下同
+    @staticmethod
+    def build_login_request(username, password):
+        request_data = {
+            'username' : username,
+            'password' : password
+        }
+        return MessageBuilder.__build_request('login', request_data)
+    
+    @staticmethod
+    def build_register_request(username, password):
+        request_data = {
+            'username' : username,
+            'password' : password
+        }
+        return MessageBuilder.__build_request('register', request_data)
+    
+    @staticmethod
+    def build_delete_request(username, password):
+        request_data = {
+            'username' : username,
+            'password' : password
+        }
+        return MessageBuilder.__build_request('delete', request_data)
+    
+    @staticmethod
+    def build_send_personal_message_request(sender, receiver, content):
+        message_data = {
+            'sender': sender,
+            'receiver' : receiver,
+            'content' : content,
+            'timestamp' : time.time()
+        }
+        return MessageBuilder.__build_request('send_personal_message', message_data)
+    
+    @staticmethod
+    def build_send_group_message_request(sender, group, content):
+        message_data = {
+            'sender': sender,
+            'group' : group,
+            'content' : content,
+            'timestamp' : time.time()
+        }
+        return MessageBuilder.__build_request('send_group_messager', message_data)
+    # endregion
