@@ -7,6 +7,8 @@ import os
 import threading
 import logging
 import time
+import queue
+from datetime import datetime
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -14,7 +16,7 @@ from utils import MessageBuilder as mb
 
 
 class CurrentUser:
-    username = None  # 静态成员变量
+    username = None
 
     @staticmethod
     def set_username(username):
@@ -32,24 +34,49 @@ class ChatConnection:
     def __init__(self, host, port, heartbeat_interval = 10):
         self.host = host
         self.port = port
-        self.client_socket = None
+        self.server_socket = None
         self.heartbeat_interval = heartbeat_interval
         self.lock = threading.Lock()
+        response_queue = queue()
     def start_connect(self):
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((self.host, self.port))
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.connect((self.host, self.port))
+        listen_thread = threading.Thread(target=self.handle_server, args=(self.server_socket))
+        listen_thread.start()
         threading.Thread(target=self.send_heartbeat).start()
-        self.listen_to_server()
 
     def disconnect(self):
         with self.lock:
-            if self.client_socket:
-                self.client_socket.close()
-                self.client_socket = None
+            if self.server_socket:
+                self.server_socket.close()
+                self.server_socket = None
     
-    def listen_to_server(self):
-        listen_thread = threading.Thread(target=self.message_handler)
-        listen_thread.start()
+    def handle_server(self, server_socket):
+        last_heartbeat_time = datetime.now()
+        server_socket.settimeout(15)
+        while self.server_socket is not None:
+            try:
+                message_json = server_socket.recv(1024).decode('utf-8')
+                logging.info(f"receive message:{message_json}")
+                message = json.loads(message_json)
+                last_heartbeat_time = datetime.now()
+                type = message['type']
+                if type == 'heartbeat':
+                    pass
+                elif type == 'response':
+                    self.response_queue.put(message)
+                else: self.message_handler(message)
+            except socket.timeout:
+                logging.debug("socket timeout")
+                if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
+                    logging.info("server time out")
+                self.disconnect()
+            except Exception as e:
+                logging.error(f"Error receiving message:{str(e)}")
+                self.disconnect()
+                break
+    def message_handler(message):
+        pass
     
     def send_message(self, message):
         is_open_before = False
@@ -58,28 +85,16 @@ class ChatConnection:
         else: is_open_before = True
         with self.lock:
             try:
-                return self.client_socket.send(json.dumps(message).encode('utf-8'))
+                self.client_socket.send(json.dumps(message).encode('utf-8'))
             except Exception as e:
                 QMessageBox.critical(QMessageBox(), "Error", str(e))
         if not is_open_before: self.disconnect()
-    
-    def message_handler(self):
-        while self.client_socket is not None:
-            try:
-                message_json = self.client_socket.recv(1024).decode('utf-8')
-                message = json.loads(message_json)
-                type = message['type']
-                if type == 'response':
-                    self.parent.response_signal.emit(message)
-            except Exception as e:
-                logging.error(f"Error receiving message:{str(e)}")
-                self.disconnect()
-                break
     
     def send_heartbeat(self):
         while self.client_socket is not None:
             try:
                 username = CurrentUser.get_username()
+                logging.info(f'username is{username}')
                 if username is not None:
                     message = mb.build_heartbeat(username)
                     self.send_message(message)
@@ -240,6 +255,7 @@ class LoginPage(QWidget):
             return
         message = mb.build_login_request(username, password)
         if self.parent.connection.send_message(message):
+            CurrentUser.set_username(username)
             self.parent.show_chat_page()
 
 class DeletePage(QWidget):
