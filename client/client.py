@@ -38,7 +38,7 @@ class ChatConnection:
         self.heartbeat_interval = heartbeat_interval
         self.timeout = timeout
         self.lock = threading.Lock()
-        self.response_queue = queue.Queue(1)
+        self.response_cache = None
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -65,7 +65,7 @@ class ChatConnection:
                 if message_type == 'heartbeat':
                     logging.debug("Received heartbeat from server")
                 elif message_type == 'response':
-                    self.response_queue.put(message)
+                    self.response_cache = message
                 else:
                     self.handle_message(message)
             except socket.timeout:
@@ -172,7 +172,7 @@ class ChatClient(QMainWindow):
         return response['success']
     
     def get_response(self):
-        return self.connection.response_queue.get()
+        return self.connection.response_cache
 
 class MainPage(QWidget):
     def __init__(self, parent=None):
@@ -343,7 +343,7 @@ class ChatPage(QWidget):
         content = self.message_entry.toPlainText()
         message = mb.build_send_personal_message_request(username, reciver, content)
         self.parent.connection.send_message(message)
-        response = self.parent.connection.response_queue.get()
+        response = self.parent.connection.response_cache
         self.parent.show_response(response)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
@@ -356,10 +356,30 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
         
-        file_handler = logging.FileHandler('c-debug.log')
+        args = sys.argv
+        if len(args) >= 1:
+            logfilename = args[1] + '-debug.log'
+        else: logfilename = 'c-debug.log'
+        file_handler = logging.FileHandler(logfilename)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
+def debug_func(client):
+    connection = client.connection
+    args = sys.argv
+    if len(args) >= 1:
+        username = 'user' + args[1]
+    else: username = 'user'
+    password = '123'
+    register_msg = mb.build_register_request(username, password)
+    login_msg = mb.build_login_request(username, password)
+    connection.send_message(register_msg)
+    time.sleep(1)
+    connection.send_message(login_msg)
+    CurrentUser.set_username(username)
+    client.show_chat_page()
+    client.setWindowTitle(username)
 
 if __name__ == '__main__':
     config_logging()
@@ -371,4 +391,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     client = ChatClient(ip_address, 9999)
     client.show()
+    if os.environ.get('DEBUG') == 'True':
+        debug_func(client)  
     sys.exit(app.exec_())
