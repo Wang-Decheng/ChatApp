@@ -101,6 +101,7 @@ class MessageBuilder:
     @staticmethod
     def build_send_personal_message_request(sender, receiver, content):
         message_data = {
+            'type' : 'personal_message',
             'sender': sender,
             'receiver' : receiver,
             'content' : content,
@@ -111,6 +112,7 @@ class MessageBuilder:
     @staticmethod
     def build_send_group_message_request(sender, group, content):
         message_data = {
+            'type' : 'group_message',
             'sender': sender,
             'group' : group,
             'content' : content,

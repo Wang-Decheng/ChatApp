@@ -31,17 +31,18 @@ class CurrentUser:
         return CurrentUser.username
 
 class ChatConnection:
-    def __init__(self, host, port, heartbeat_interval = 10):
+    def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
         self.host = host
         self.port = port
         self.server_socket = None
         self.heartbeat_interval = heartbeat_interval
+        self.timeout = timeout
         self.lock = threading.Lock()
-        response_queue = queue()
+        self.response_queue = queue.Queue(1)
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
-        listen_thread = threading.Thread(target=self.handle_server, args=(self.server_socket))
+        listen_thread = threading.Thread(target=self.handle_server)
         listen_thread.start()
         threading.Thread(target=self.send_heartbeat).start()
 
@@ -51,50 +52,54 @@ class ChatConnection:
                 self.server_socket.close()
                 self.server_socket = None
     
-    def handle_server(self, server_socket):
+    def handle_server(self):
         last_heartbeat_time = datetime.now()
-        server_socket.settimeout(15)
-        while self.server_socket is not None:
+        self.server_socket.settimeout(15)
+        while True:
             try:
-                message_json = server_socket.recv(1024).decode('utf-8')
-                logging.info(f"receive message:{message_json}")
+                message_json = self.server_socket.recv(1024).decode('utf-8')
+                logging.info(f"Received message: {message_json}")
                 message = json.loads(message_json)
                 last_heartbeat_time = datetime.now()
-                type = message['type']
-                if type == 'heartbeat':
-                    pass
-                elif type == 'response':
+                message_type = message.get('type')
+                if message_type == 'heartbeat':
+                    logging.debug("Received heartbeat from server")
+                elif message_type == 'response':
                     self.response_queue.put(message)
-                else: self.message_handler(message)
+                else:
+                    self.handle_message(message)
             except socket.timeout:
-                logging.debug("socket timeout")
+                logging.debug("Socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
-                    logging.info("server time out")
+                    logging.info("Server timeout")
                 self.disconnect()
-            except Exception as e:
-                logging.error(f"Error receiving message:{str(e)}")
-                self.disconnect()
-                break
-    def message_handler(message):
-        pass
+            except json.JSONDecodeError:
+                logging.error("Error decoding JSON message")
+            except KeyError as e:
+                logging.error(f"Missing key in message: {e}")
+
+    def handle_message(self, message):
+        if message['type'] == 'personal_message':
+            sender = message['sender']
+            content = message['content']
+            timestamp = message['timestamp']
+            timestamp_datetime = datetime.fromtimestamp(timestamp)
+            formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
+            self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:{content}")
     
     def send_message(self, message):
-        is_open_before = False
-        if not self.client_socket:
+        if not self.server_socket:
             self.start_connect()
-        else: is_open_before = True
         with self.lock:
             try:
-                self.client_socket.send(json.dumps(message).encode('utf-8'))
+                self.server_socket.send(json.dumps(message).encode('utf-8'))
             except Exception as e:
-                QMessageBox.critical(QMessageBox(), "Error", str(e))
-        if not is_open_before: self.disconnect()
+                logging.error(str(e))
     
     def send_heartbeat(self):
-        while self.client_socket is not None:
+        while self.server_socket is not None:
             try:
                 username = CurrentUser.get_username()
-                logging.info(f'username is{username}')
                 if username is not None:
                     message = mb.build_heartbeat(username)
                     self.send_message(message)
@@ -110,11 +115,9 @@ class ChatClient(QMainWindow):
         self.connection = ChatConnection(host, port)
         self.host = host
         self.port = port
-        self.client_socket = None
         self.lock = threading.Lock()
         self.username = None
         self.connection.parent = self
-        
         self.response_signal.connect(self.show_response)
         # region 窗口组件
         self.setWindowTitle("Chat Client")
@@ -167,6 +170,9 @@ class ChatClient(QMainWindow):
             error_message = response['message']
             QMessageBox.critical(self, "Error", error_message)
         return response['success']
+    
+    def get_response(self):
+        return self.connection.response_queue.get()
 
 class MainPage(QWidget):
     def __init__(self, parent=None):
@@ -219,7 +225,9 @@ class RegisterPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_register_request(username, password)
-        if self.parent.connection.send_message(message):
+        self.parent.connection.send_message(message)
+        response = self.parent.get_response()
+        if self.parent.show_response(response):
             self.parent.show_main_page()
 
 class LoginPage(QWidget):
@@ -254,7 +262,9 @@ class LoginPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_login_request(username, password)
-        if self.parent.connection.send_message(message):
+        self.parent.connection.send_message(message)
+        response = self.parent.get_response()
+        if self.parent.show_response(response):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
 
@@ -293,7 +303,9 @@ class DeletePage(QWidget):
                                     QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.Yes:
             message = mb.build_delete_request(username, password)
-            if self.parent.connection.send_message(message):
+            self.parent.connection.send_message(message)
+            response = self.parent.get_response()
+            if self.parent.show_response(response):
                 self.parent.show_main_page()
 
 class ChatPage(QWidget):
@@ -331,6 +343,8 @@ class ChatPage(QWidget):
         content = self.message_entry.toPlainText()
         message = mb.build_send_personal_message_request(username, reciver, content)
         self.parent.connection.send_message(message)
+        response = self.parent.connection.response_queue.get()
+        self.parent.show_response(response)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()

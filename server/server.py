@@ -2,7 +2,7 @@ import socket
 import json
 from threading import Thread
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import sys
 
@@ -115,7 +115,7 @@ class MessageHandler:
         if self.user_manager.is_online(receiver):
             receiver_client = self.user_manager.get_socket(receiver)
             success = Server.send_message(receiver_client, request_data)
-            if success: message = '发送成功'
+            if success: message = 'send success'
         else:
             success, message = False, 'Receiver is not Online'
         return mb.build_response(success, message)
