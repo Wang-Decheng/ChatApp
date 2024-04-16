@@ -3,3 +3,7 @@ __pycache__
 __temp__
 *.db
 *.log
+.gitignore
+.history/
+.vscode/
+image/

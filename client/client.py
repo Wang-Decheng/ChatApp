@@ -1,6 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit,  QHBoxLayout
-from PyQt5.QtCore import Qt,  pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout
+from PyQt5.QtCore import Qt, pyqtSignal
 import socket
 import json
 import os
@@ -14,14 +14,13 @@ sys.path.append(".")
 from utils import MessageBuilder as mb
 
 
-
 class CurrentUser:
     username = None
 
     @staticmethod
     def set_username(username):
         CurrentUser.username = username
-        
+
     @staticmethod
     def del_username():
         CurrentUser.username = None
@@ -30,15 +29,18 @@ class CurrentUser:
     def get_username():
         return CurrentUser.username
 
+
 class ChatConnection:
-    def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
+
+    def __init__(self, host, port, heartbeat_interval=10, timeout=30):
         self.host = host
         self.port = port
-        self.server_socket = None
+        self.server_socket = None  # NOTE 变量名改为client_socket(或者to_server_socket)更容易理解
         self.heartbeat_interval = heartbeat_interval
         self.timeout = timeout
         self.lock = threading.Lock()
         self.response_cache = None
+
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -51,7 +53,7 @@ class ChatConnection:
             if self.server_socket:
                 self.server_socket.close()
                 self.server_socket = None
-    
+
     def handle_server(self):
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
@@ -86,7 +88,7 @@ class ChatConnection:
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
             self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:{content}")
-    
+
     def send_message(self, message):
         if not self.server_socket:
             self.start_connect()
@@ -95,7 +97,7 @@ class ChatConnection:
                 self.server_socket.send(json.dumps(message).encode('utf-8'))
             except Exception as e:
                 logging.error(str(e))
-    
+
     def send_heartbeat(self):
         while self.server_socket is not None:
             try:
@@ -107,8 +109,10 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
+
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)
+
     def __init__(self, host, port):
         super().__init__()
 
@@ -138,21 +142,27 @@ class ChatClient(QMainWindow):
         self.stack.addWidget(self.delete_page)
         self.stack.addWidget(self.chat_page)
         # endregion
+
     # region 切换页面
     def show_login_page(self):
         self.stack.setCurrentWidget(self.login_page)
         self.clear_text(self.login_page)
+
     def show_register_page(self):
         self.stack.setCurrentWidget(self.register_page)
         self.clear_text(self.register_page)
+
     def show_delete_page(self):
         self.stack.setCurrentWidget(self.delete_page)
         self.clear_text(self.delete_page)
+
     def show_main_page(self):
         self.stack.setCurrentWidget(self.main_page)
+
     def show_chat_page(self):
         self.stack.setCurrentWidget(self.chat_page)
-    # end region    
+
+    # end region
     @staticmethod
     def clear_text(widget):
         if isinstance(widget, (QLineEdit, QTextEdit)):
@@ -160,9 +170,9 @@ class ChatClient(QMainWindow):
         elif isinstance(widget, QWidget):
             for child in widget.findChildren((QLineEdit, QTextEdit)):
                 child.clear()
-    
+
     def show_response(self, response):
-        if not response:return
+        if not response: return
         if response['success']:
             message = response['message']
             QMessageBox.information(self, "Success", message)
@@ -170,11 +180,13 @@ class ChatClient(QMainWindow):
             error_message = response['message']
             QMessageBox.critical(self, "Error", error_message)
         return response['success']
-    
+
     def get_response(self):
         return self.connection.response_cache
 
+
 class MainPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -193,7 +205,9 @@ class MainPage(QWidget):
 
         self.setLayout(layout)
 
+
 class RegisterPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -230,7 +244,9 @@ class RegisterPage(QWidget):
         if self.parent.show_response(response):
             self.parent.show_main_page()
 
+
 class LoginPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -268,7 +284,9 @@ class LoginPage(QWidget):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
 
+
 class DeletePage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -299,8 +317,10 @@ class DeletePage(QWidget):
         if not username.strip() or not password.strip():
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
-        confirmation = QMessageBox.question(self, "Confirmation", "Are you sure you want to delete your account?",
-                                    QMessageBox.Yes | QMessageBox.No)
+        confirmation = QMessageBox.question(
+            self, "Confirmation", "Are you sure you want to delete your account?",
+            QMessageBox.Yes | QMessageBox.No
+        )
         if confirmation == QMessageBox.Yes:
             message = mb.build_delete_request(username, password)
             self.parent.connection.send_message(message)
@@ -308,7 +328,9 @@ class DeletePage(QWidget):
             if self.parent.show_response(response):
                 self.parent.show_main_page()
 
+
 class ChatPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -320,7 +342,7 @@ class ChatPage(QWidget):
         self.receiver_entry = QLineEdit()
         self.message_entry = QTextEdit()
         self.back_button = QPushButton("Back")
-        self.send_message_button = QPushButton("Send Message") 
+        self.send_message_button = QPushButton("Send Message")
 
         self.back_button.clicked.connect(parent.show_main_page)
         self.send_message_button.clicked.connect(self.send_message)
@@ -346,6 +368,7 @@ class ChatPage(QWidget):
         response = self.parent.connection.response_cache
         self.parent.show_response(response)
 
+
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -355,22 +378,25 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         formatter = logging.Formatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-        
+
         args = sys.argv
         if len(args) >= 1:
             logfilename = args[1] + '-debug.log'
-        else: logfilename = 'c-debug.log'
+        else:
+            logfilename = 'c-debug.log'
         file_handler = logging.FileHandler(logfilename)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
 
 def debug_func(client):
     connection = client.connection
     args = sys.argv
     if len(args) >= 1:
         username = 'user' + args[1]
-    else: username = 'user'
+    else:
+        username = 'user'
     password = '123'
     register_msg = mb.build_register_request(username, password)
     login_msg = mb.build_login_request(username, password)
@@ -380,6 +406,7 @@ def debug_func(client):
     CurrentUser.set_username(username)
     client.show_chat_page()
     client.setWindowTitle(username)
+
 
 if __name__ == '__main__':
     config_logging()
@@ -392,5 +419,5 @@ if __name__ == '__main__':
     client = ChatClient(ip_address, 9999)
     client.show()
     if os.environ.get('DEBUG') == 'True':
-        debug_func(client)  
+        debug_func(client)
     sys.exit(app.exec_())

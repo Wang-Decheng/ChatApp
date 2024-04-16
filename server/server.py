@@ -11,14 +11,16 @@ import user_manager as usermanager
 sys.path.append(".")
 from utils import MessageBuilder as mb
 
+
 class Server:
-    def __init__(self, host, port,heartbeat_timeout = 30):
+
+    def __init__(self, host, port, heartbeat_timeout=30):
         self.host = host
         self.port = port
         self.timeout = heartbeat_timeout
         self.user_manager = usermanager.UserManager()
         self.messagehandler = MessageHandler(self.user_manager)
-    
+
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(15)
         last_heartbeat_time = datetime.now()
@@ -39,12 +41,14 @@ class Server:
                         self.user_manager.set_offline(username)
                         username = message['who']
                         self.user_manager.set_online(username, client_socket)
-                else: self.messagehandler.handle_message(message, client_socket)
+                else:
+                    self.messagehandler.handle_message(message, client_socket)
             except socket.timeout:
                 logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
                     logging.info(f"Connection with {client_address} is closed.")
-                    if username: self.user_manager.set_offline(username)
+                    if username:
+                        self.user_manager.set_offline(username)
                     client_socket.close()
             except ConnectionResetError:
                 logging.info(f"Connection with {client_address} is closed.")
@@ -54,10 +58,11 @@ class Server:
             except socket.error:
                 logging.info(f"Connection with {client_address} is closed.")
                 break
+
     @staticmethod
     def send_message(client_socket, message):
         return client_socket.send(json.dumps(message).encode('utf-8'))
-    
+
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
@@ -70,10 +75,12 @@ class Server:
             client_handler = Thread(target=self.handle_client, args=(client_socket, client_address))
             client_handler.start()
 
+
 class MessageHandler:
+
     def __init__(self, user_manager):
         self.user_manager = user_manager
-    
+
     def handle_message(self, message, client_socket):
         type = message['type']
         if type == 'request':
@@ -86,9 +93,10 @@ class MessageHandler:
                 message = self.handle_delete_account(message['request_data'])
             elif action == 'send_personal_message':
                 message = self.handle_send_personal_message(message['request_data'])
-        if message: Server.send_message(client_socket, message)
-        
-    
+
+        if message:
+            Server.send_message(client_socket, message)
+
     def handle_login(self, request_data, client_socket):
         username = request_data.get('username')
         password = request_data.get('password')
@@ -97,7 +105,7 @@ class MessageHandler:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
         return mb.build_response(success, message)
-    
+
     def handle_register(self, request_data):
         username = request_data.get('username')
         password = request_data.get('password')
@@ -120,6 +128,7 @@ class MessageHandler:
             success, message = False, 'Receiver is not Online'
         return mb.build_response(success, message)
 
+
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -129,11 +138,12 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         formatter = logging.Formatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-        
+
         file_handler = logging.FileHandler('s-debug.log')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
 
 if __name__ == '__main__':
     config_logging()
@@ -144,3 +154,5 @@ if __name__ == '__main__':
     print(ip_address)
     server = Server(ip_address, 9999)
     server.start()
+
+    # NOTE 是否可以把IP和端口号在utils定义，避免之后可能需要多处更改
