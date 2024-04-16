@@ -350,11 +350,13 @@ class ChatPage(QWidget):
     def send_message(self):
         username = CurrentUser.get_username()
         reciver = self.receiver_entry.text()
-        content = self.message_entry.toPlainText()
-        message = mb.build_send_personal_message_request(username, reciver, content)
-        timestamp = message['timestamp']
-        self.parent.connection.send_message(message)
-        response = self.parent.get_response(timestamp)
+        if username != reciver:
+            content = self.message_entry.toPlainText()
+            message = mb.build_send_personal_message_request(username, reciver, content)
+            timestamp = message['timestamp']
+            self.parent.connection.send_message(message)
+            response = self.parent.get_response(timestamp)
+        else: response = {'success':False, 'message': 'Can not send to yourself'}
         self.parent.show_response(response)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
