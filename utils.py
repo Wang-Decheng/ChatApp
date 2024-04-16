@@ -58,8 +58,12 @@ class MessageBuilder:
 
     # 生成响应信息
     @staticmethod
-    def build_response(success, message):
-        message_data = {'type': 'response', 'success': success, 'message': message}
+    def build_response(success, message, request_timestamp):
+        message_data = {
+            'type': 'response',
+            'timestamp':request_timestamp, 
+            'success': success,
+            'message': message}
         return message_data
 
     # 生成心跳包
@@ -72,7 +76,11 @@ class MessageBuilder:
     # 根据请求内容生成请求
     @staticmethod
     def __build_request(action, request_data):
-        message_data = {'type': 'request', 'action': action, 'request_data': request_data}
+        message_data = {
+            'type': 'request',
+            'action': action,
+            'timestamp': time.time(),
+            'request_data': request_data}
         return message_data
 
     # 根据请求类型的不同生成不同的请求内容对象，然后生成请求信息，下同

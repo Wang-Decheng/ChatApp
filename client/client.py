@@ -13,8 +13,6 @@ from datetime import datetime
 sys.path.append(".")
 from utils import MessageBuilder as mb
 
-
-
 class CurrentUser:
     username = None
 
@@ -106,6 +104,14 @@ class ChatConnection:
             except Exception as e:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
+    
+    def get_response(self, request_timestamp, timelimit = 1):
+        start_time = time.time()
+        while(self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
+            if(time.time() - start_time > timelimit): break
+        if self.response_cache['timestamp'] == request_timestamp:
+            return self.response_cache
+        else: return False, 'No Response'
 
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)
@@ -122,6 +128,7 @@ class ChatClient(QMainWindow):
         # region 窗口组件
         self.setWindowTitle("Chat Client")
         self.setGeometry(100, 100, 300, 150)
+        self.setMinimumSize(400, 600)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -171,8 +178,8 @@ class ChatClient(QMainWindow):
             QMessageBox.critical(self, "Error", error_message)
         return response['success']
     
-    def get_response(self):
-        return self.connection.response_cache
+    def get_response(self, request_timestamp):
+        return self.connection.get_response(request_timestamp)
 
 class MainPage(QWidget):
     def __init__(self, parent=None):
@@ -225,8 +232,9 @@ class RegisterPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_register_request(username, password)
+        timestamp = message['timestamp']
         self.parent.connection.send_message(message)
-        response = self.parent.get_response()
+        response = self.parent.get_response(timestamp)
         if self.parent.show_response(response):
             self.parent.show_main_page()
 
@@ -262,8 +270,9 @@ class LoginPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_login_request(username, password)
+        timestamp = message['timestamp']
         self.parent.connection.send_message(message)
-        response = self.parent.get_response()
+        response = self.parent.get_response(timestamp)
         if self.parent.show_response(response):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
@@ -303,8 +312,9 @@ class DeletePage(QWidget):
                                     QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.Yes:
             message = mb.build_delete_request(username, password)
+            timestamp = message['timestamp']
             self.parent.connection.send_message(message)
-            response = self.parent.get_response()
+            response = self.parent.get_response(timestamp)
             if self.parent.show_response(response):
                 self.parent.show_main_page()
 
@@ -342,8 +352,9 @@ class ChatPage(QWidget):
         reciver = self.receiver_entry.text()
         content = self.message_entry.toPlainText()
         message = mb.build_send_personal_message_request(username, reciver, content)
+        timestamp = message['timestamp']
         self.parent.connection.send_message(message)
-        response = self.parent.connection.response_cache
+        response = self.parent.get_response(timestamp)
         self.parent.show_response(response)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):

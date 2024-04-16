@@ -79,46 +79,54 @@ class MessageHandler:
         if type == 'request':
             action = message['action']
             if action == 'login':
-                message = self.handle_login(message['request_data'], client_socket)
+                message = self.handle_login(message, client_socket)
             elif action == 'register':
-                message = self.handle_register(message['request_data'])
+                message = self.handle_register(message)
             elif action == 'delete':
-                message = self.handle_delete_account(message['request_data'])
+                message = self.handle_delete_account(message)
             elif action == 'send_personal_message':
-                message = self.handle_send_personal_message(message['request_data'])
+                message = self.handle_send_personal_message(message)
         if message: Server.send_message(client_socket, message)
         
     
-    def handle_login(self, request_data, client_socket):
+    def handle_login(self, message, client_socket):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
         username = request_data.get('username')
         password = request_data.get('password')
-        success, message = self.user_manager.login_user(username, password)
+        success, response_text = self.user_manager.login_user(username, password)
         if success:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
-        return mb.build_response(success, message)
+        return mb.build_response(success, response_text, request_timestamp)
     
-    def handle_register(self, request_data):
+    def handle_register(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
         username = request_data.get('username')
         password = request_data.get('password')
-        success, message = self.user_manager.register_user(username, password)
-        return mb.build_response(success, message)
+        success, response_text = self.user_manager.register_user(username, password)
+        return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_delete_account(self, request_data):
+    def handle_delete_account(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
         username = request_data.get('username')
         password = request_data.get('password')
-        success, message = self.user_manager.delete_account(username, password)
-        return mb.build_response(success, message)
+        success, response_text = self.user_manager.delete_account(username, password)
+        return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_send_personal_message(self, request_data):
+    def handle_send_personal_message(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
         receiver = request_data.get('receiver')
         if self.user_manager.is_online(receiver):
             receiver_client = self.user_manager.get_socket(receiver)
             success = Server.send_message(receiver_client, request_data)
-            if success: message = 'send success'
+            if success: response_text = 'send success'
         else:
-            success, message = False, 'Receiver is not Online'
-        return mb.build_response(success, message)
+            success, response_text = False, 'Receiver is not Online'
+        return mb.build_response(success, response_text, request_timestamp)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
