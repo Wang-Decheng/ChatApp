@@ -90,7 +90,9 @@ class ChatConnection:
             self.start_connect()
         with self.lock:
             try:
-                self.server_socket.send(json.dumps(message).encode('utf-8'))
+                message_json = json.dumps(message)
+                logging.info(f"Sending message: {message_json}")
+                self.server_socket.send(message_json.encode('utf-8'))
             except Exception as e:
                 logging.error(str(e))
     

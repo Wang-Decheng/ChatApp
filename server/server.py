@@ -40,6 +40,8 @@ class Server:
                         username = message['who']
                         self.user_manager.set_online(username, client_socket)
                 else: self.messagehandler.handle_message(message, client_socket)
+            except json.JSONDecodeError:
+                logging.info("json decode error")
             except socket.timeout:
                 logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
