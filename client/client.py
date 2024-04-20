@@ -35,11 +35,12 @@ class ChatConnection:
     def __init__(self, host, port, heartbeat_interval=10, timeout=30):
         self.host = host
         self.port = port
-        self.server_socket = None  # NOTE 变量名改为client_socket(或者to_server_socket)更容易理解
+        self.server_socket = None
         self.heartbeat_interval = heartbeat_interval
         self.timeout = timeout
         self.lock = threading.Lock()
         self.response_cache = None
+        self.parent = None
 
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -87,7 +88,7 @@ class ChatConnection:
             timestamp = message['timestamp']
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
-            self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:{content}")
+            self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:\n{content}")
 
     def send_message(self, message):
         if not self.server_socket:
@@ -109,6 +110,15 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
+    def get_response(self, request_timestamp, timelimit=1):
+        start_time = time.time()
+        while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
+            if (time.time() - start_time > timelimit): break
+        if self.response_cache['timestamp'] == request_timestamp:
+            return self.response_cache
+        else:
+            return False, 'No Response'
+
 
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)
@@ -126,6 +136,7 @@ class ChatClient(QMainWindow):
         # region 窗口组件
         self.setWindowTitle("Chat Client")
         self.setGeometry(100, 100, 300, 150)
+        self.setMinimumSize(400, 600)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -161,6 +172,7 @@ class ChatClient(QMainWindow):
 
     def show_chat_page(self):
         self.stack.setCurrentWidget(self.chat_page)
+        self.clear_text(self.chat_page)  # 在打开聊天页面时清理之前的聊天痕迹
 
     # end region
     @staticmethod
@@ -181,8 +193,8 @@ class ChatClient(QMainWindow):
             QMessageBox.critical(self, "Error", error_message)
         return response['success']
 
-    def get_response(self):
-        return self.connection.response_cache
+    def get_response(self, request_timestamp):
+        return self.connection.get_response(request_timestamp)
 
 
 class MainPage(QWidget):
@@ -239,8 +251,9 @@ class RegisterPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_register_request(username, password)
+        timestamp = message['timestamp']
         self.parent.connection.send_message(message)
-        response = self.parent.get_response()
+        response = self.parent.get_response(timestamp)
         if self.parent.show_response(response):
             self.parent.show_main_page()
 
@@ -278,8 +291,9 @@ class LoginPage(QWidget):
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
         message = mb.build_login_request(username, password)
+        timestamp = message['timestamp']
         self.parent.connection.send_message(message)
-        response = self.parent.get_response()
+        response = self.parent.get_response(timestamp)
         if self.parent.show_response(response):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
@@ -323,8 +337,9 @@ class DeletePage(QWidget):
         )
         if confirmation == QMessageBox.Yes:
             message = mb.build_delete_request(username, password)
+            timestamp = message['timestamp']
             self.parent.connection.send_message(message)
-            response = self.parent.get_response()
+            response = self.parent.get_response(timestamp)
             if self.parent.show_response(response):
                 self.parent.show_main_page()
 
@@ -362,10 +377,14 @@ class ChatPage(QWidget):
     def send_message(self):
         username = CurrentUser.get_username()
         reciver = self.receiver_entry.text()
-        content = self.message_entry.toPlainText()
-        message = mb.build_send_personal_message_request(username, reciver, content)
-        self.parent.connection.send_message(message)
-        response = self.parent.connection.response_cache
+        if username != reciver:
+            content = self.message_entry.toPlainText()
+            message = mb.build_send_personal_message_request(username, reciver, content)
+            timestamp = message['timestamp']
+            self.parent.connection.send_message(message)
+            response = self.parent.get_response(timestamp)
+        else:
+            response = {'success': False, 'message': 'Can not send to yourself'}
         self.parent.show_response(response)
 
 
