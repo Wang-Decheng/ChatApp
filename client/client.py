@@ -88,7 +88,8 @@ class ChatConnection:
             timestamp = message['timestamp']
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
-            self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:\n{content}")
+            string = f"[{formatted_timestamp}]{sender}->You:\n{content}\n"
+            self.parent.chat_page.display_message(string)
 
     def send_message(self, message):
         if not self.server_socket:
@@ -351,8 +352,8 @@ class ChatPage(QWidget):
         self.parent = parent
 
         self.chat_label = QLabel("Chat Page")
-        self.message_display = QLabel()
-        self.message_display.setMinimumHeight(100)
+        self.message_display = QTextEdit()
+        self.message_display.setReadOnly(True)
         self.send_to_label = QLabel("Send to:")
         self.receiver_entry = QLineEdit()
         self.message_entry = QTextEdit()
@@ -386,6 +387,9 @@ class ChatPage(QWidget):
         else:
             response = {'success': False, 'message': 'Can not send to yourself'}
         self.parent.show_response(response)
+
+    def display_message(self, message):
+        self.message_display.append(message)
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
