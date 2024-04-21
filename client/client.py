@@ -10,6 +10,7 @@ import time
 import queue
 from datetime import datetime
 import struct
+import pickle
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -450,8 +451,7 @@ class ChatPage(QWidget):
                     data = fp.read(800)
                     if not data:
                         break
-                    data_str = data.decode('utf-8')
-                    file_data = mb.build_file_data(username, receiver, os.path.basename(file_path), data_str)
+                    file_data = mb.build_file_data(username, receiver, os.path.basename(file_path), data)
                     self.parent.connection.send_message(file_data)
 
             self.display_message(file_path)  # test

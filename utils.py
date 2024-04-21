@@ -123,7 +123,7 @@ class MessageBuilder:
         }
         return MessageBuilder.__build_request('send_group_messager', message_data)
 
-    # MARK 增加文件传输请求数据包、文件内容数据包
+    # MARK 增加文件传输请求数据包、文件内容数据包等
     @staticmethod
     def build_file_transfer_header(sender, receiver, file_name, file_size, accept_or_refuse):
         message_data = {

@@ -27,7 +27,7 @@ class Server:
         username = None
         while True:
             try:
-                message_json = client_socket.recv(1024).decode('gbk')
+                message_json = client_socket.recv(1024).decode('utf-8')
                 logging.info("server receive message:" + message_json)
                 message = json.loads(message_json)
                 last_heartbeat_time = datetime.now()
@@ -63,7 +63,7 @@ class Server:
     def send_message(client_socket, message):
         if not message:
             return
-        return client_socket.send(json.dumps(message).encode('gbk'))
+        return client_socket.send(json.dumps(message).encode('utf-8'))
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
