@@ -27,7 +27,7 @@ class Server:
         username = None
         while True:
             try:
-                message_json = client_socket.recv(1024).decode('utf-8')
+                message_json = client_socket.recv(1024).decode('gbk')
                 logging.info("server receive message:" + message_json)
                 message = json.loads(message_json)
                 last_heartbeat_time = datetime.now()
@@ -61,7 +61,9 @@ class Server:
 
     @staticmethod
     def send_message(client_socket, message):
-        return client_socket.send(json.dumps(message).encode('utf-8'))
+        if not message:
+            return
+        return client_socket.send(json.dumps(message).encode('gbk'))
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,17 +85,25 @@ class MessageHandler:
 
     def handle_message(self, message, client_socket):
         type = message['type']
+        response = None
         if type == 'request':
             action = message['action']
-            if action == 'login':
-                message = self.handle_login(message, client_socket)
-            elif action == 'register':
-                message = self.handle_register(message)
-            elif action == 'delete':
-                message = self.handle_delete_account(message)
-            elif action == 'send_personal_message':
-                message = self.handle_send_personal_message(message)
-        if message: Server.send_message(client_socket, message)
+            match action:
+                case 'login':
+                    response = self.handle_login(message, client_socket)
+                case 'register':
+                    response = self.handle_register(message)
+                case 'delete':
+                    response = self.handle_delete_account(message)
+                case 'send_personal_message':
+                    response = self.handle_send_personal_message(message)
+                case 'file_transfer_header':
+                    response = self.handle_file_transfer_header(message)
+                case 'file_data':
+                    response = self.handle_file_data(message)
+            # TODO 增加文件内容包、文件接收确认包
+        if message:
+            Server.send_message(client_socket, response)
 
     def handle_login(self, message, client_socket):
         request_data = message['request_data']
@@ -133,6 +143,28 @@ class MessageHandler:
         else:
             success, response_text = False, 'Receiver is not Online'
         return mb.build_response(success, response_text, request_timestamp)
+
+    # TODO 增加文件传输请求包、文件内容包、文件接收确认包
+    def handle_file_transfer_header(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        if self.user_manager.is_online(receiver):
+            receiver_client = self.user_manager.get_socket(receiver)
+            success = Server.send_message(receiver_client, request_data)
+            if success:
+                response_text = 'file transfer request sent successfully'
+        else:
+            success, response_text = False, 'Receiver is not Online'
+        return mb.build_response(success, response_text, request_timestamp)
+
+    def handle_file_data(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        receiver_client = self.user_manager.get_socket(receiver)
+        success = Server.send_message(receiver_client, request_data)
+        return None  # XXX
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):

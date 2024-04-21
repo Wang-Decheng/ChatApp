@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import Qt, pyqtSignal
 import socket
 import json
@@ -9,6 +9,7 @@ import logging
 import time
 import queue
 from datetime import datetime
+import struct
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -59,7 +60,7 @@ class ChatConnection:
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
         while True:
-            try:
+            try:  # update 增加本地发送的消息显示
                 message_json = self.server_socket.recv(1024).decode('utf-8')
                 logging.info(f"Received message: {message_json}")
                 message = json.loads(message_json)
@@ -88,8 +89,23 @@ class ChatConnection:
             timestamp = message['timestamp']
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
-            string = f"[{formatted_timestamp}]{sender}->You:\n{content}\n"
+            string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
             self.parent.chat_page.display_message(string)
+
+        # TODO 增加文件传输请求包、文件内容包的处理
+        if message['type'] == 'file_tranfer_header':
+            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
+            with open(file_path, 'wb') as fp:
+                pass
+
+            self.parent.chat_page.display_message(message['file_name'])  # test
+
+        if message['type'] == 'file_data':
+            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
+            with open(file_path, 'ab') as fp:
+                data = message['file_content'].encode('utf-8')
+                fp.write(data)
+            pass
 
     def send_message(self, message):
         if not self.server_socket:
@@ -359,9 +375,11 @@ class ChatPage(QWidget):
         self.message_entry = QTextEdit()
         self.back_button = QPushButton("Back")
         self.send_message_button = QPushButton("Send Message")
+        self.send_file_button = QPushButton("Send File")
 
         self.back_button.clicked.connect(parent.show_main_page)
         self.send_message_button.clicked.connect(self.send_message)
+        self.send_file_button.clicked.connect(self.send_file)
 
         layout = QVBoxLayout()
         layout.addWidget(self.chat_label, alignment=Qt.AlignCenter)
@@ -372,6 +390,7 @@ class ChatPage(QWidget):
         layout.addLayout(send_to_layout)
         layout.addWidget(self.message_entry)
         layout.addWidget(self.send_message_button)
+        layout.addWidget(self.send_file_button)
         layout.addWidget(self.back_button)
         self.setLayout(layout)
 
@@ -389,7 +408,57 @@ class ChatPage(QWidget):
         self.parent.show_response(response)
 
     def display_message(self, message):
+        message = message + '\n'
         self.message_display.append(message)
+
+    def send_file(self):  # TODO
+        username = CurrentUser.get_username()
+        receiver = self.receiver_entry.text()
+        response = None
+
+        while True:
+            if not receiver:  # 若没有输入接收者，则返回
+                response = {'success': False, 'message': 'Please input the receiver username'}
+                break
+            if username == receiver:  # 若输入的接收者是自己，则返回
+                response = {'success': False, 'message': 'Can not send file to yourself'}
+                break
+
+            options = QFileDialog.Options()
+            file_path, _ = QFileDialog.getOpenFileName(self, "文件选择", "", "All Files (*)", options=options)
+            if not file_path:  # 若没有选择文件，则返回
+                response = {'success': False, 'message': 'No file selected'}
+                break
+
+            if not os.path.isfile(file_path):
+                response = {'success': False, 'message': 'It\'s not File'}
+                break
+
+            request = mb.build_file_transfer_header(
+                username, receiver, os.path.basename(file_path), os.path.getsize(file_path), None
+            )
+            timestamp = request['timestamp']
+            self.parent.connection.send_message(request)
+            response = self.parent.get_response(timestamp)
+
+            if not response['success']:
+                break
+
+            # BUG
+            with open(file_path, "rb") as fp:
+                while True:
+                    data = fp.read(800)
+                    if not data:
+                        break
+                    data_str = data.decode('utf-8')
+                    file_data = mb.build_file_data(username, receiver, os.path.basename(file_path), data_str)
+                    self.parent.connection.send_message(file_data)
+
+            self.display_message(file_path)  # test
+
+            break
+
+        self.parent.show_response(response)
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
