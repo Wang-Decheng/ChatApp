@@ -396,6 +396,21 @@ def debug_func(client):
     client.show_chat_page()
     client.setWindowTitle(username)
 
+def debug_send_add_friend_request(client):
+    username = 'test1'
+    password = '123'
+    friend_username = 'wdc'
+    connection = client.connection
+    message = mb.build_register_request(username, password)
+    connection.send_message(message)
+    message = mb.build_login_request(username, password)
+    connection.send_message(message)
+    CurrentUser.set_username(username)
+    message = mb.build_add_friend_request(username, friend_username)
+    connection.send_message(message)
+    response = client.get_response(message['timestamp'])
+    client.show_response(response)
+
 if __name__ == '__main__':
     config_logging()
     if os.environ.get('LOCAL') == 'True':

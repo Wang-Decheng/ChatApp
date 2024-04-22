@@ -22,6 +22,15 @@ class UserManager:
                 password_hash TEXT NOT NULL
             )
         ''')
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS friendship (
+                username TEXT NOT NULL,
+                friendname TEXT NOT NULL,
+                PRIMARY KEY (username, friendname),
+                FOREIGN KEY (username) REFERENCES users(username),
+                FOREIGN KEY (friendname) REFERENCES users(username)
+            )
+        ''')
         self.conn.commit()
         self.online_users = {}
     
@@ -63,6 +72,41 @@ class UserManager:
             self.conn.commit()
             message = 'Account deleted successfully'
         return success, message
+    
+    def is_username_exist(self, username):
+        self.cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+        user = self.cursor.fetchone()
+        return user is not None
+    
+    def get_friends(self, username):
+        self.cursor.execute('SELECT friendname FROM friendship WHERE username = ?', (username,))
+        friends = self.cursor.fetchall()
+        return [friend[0] for friend in friends]
+    
+    def add_friend(self, username, friend_username):
+        if not self.is_username_exist(friend_username):
+            return False, 'User is not exist'
+        
+        # Check if the friendship already exists
+        self.cursor.execute('SELECT * FROM friendship WHERE (username = ? AND friendname = ?) OR (username = ? AND friendname = ?)', (username, friend_username, friend_username, username))
+        existing_friendship = self.cursor.fetchone()
+        
+        if existing_friendship:
+            return False, 'Friendship already exists'
+        
+        # If friendship doesn't exist, then add the friend
+        self.cursor.execute('INSERT INTO friendship (username, friendname) VALUES (?, ?)', (username, friend_username))
+        self.conn.commit()
+        return True, 'Friend added successfully'
+
+    
+    def remove_friend(self, username, friend_username):
+        if not self.is_username_exist(friend_username):
+            return False, 'User is not exist'
+        self.cursor.execute('DELETE FROM friendship WHERE username = ? AND friendname = ?', (username, friend_username))
+        self.conn.commit()
+        return True, 'Friend removed successfully'
+
     
     def set_online(self, username, socket):
         self.online_users[username] = socket

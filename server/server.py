@@ -5,11 +5,20 @@ import os
 from datetime import datetime
 import logging
 import sys
+from flask import Flask, jsonify, request
 
 import user_manager as usermanager
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
+
+app = Flask(__name__)
+
+@app.route('/api/get_friends', methods=['GET'])
+def get_friends():
+    username = request.args.get('username')
+    friends = user_manager.get_friends(username)
+    return jsonify(friends)
 
 class Server:
     def __init__(self, host, port,heartbeat_timeout = 30):
@@ -40,14 +49,17 @@ class Server:
                         username = message['who']
                         self.user_manager.set_online(username, client_socket)
                 else: self.messagehandler.handle_message(message, client_socket)
-            except json.JSONDecodeError:
-                logging.info("json decode error")
+            except json.JSONDecodeError as e:
+                logging.info(str(e))
+                client_socket.close()
+                break
             except socket.timeout:
                 logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
-                    logging.info(f"Connection with {client_address} is closed.")
-                    if username: self.user_manager.set_offline(username)
-                    client_socket.close()
+                    pass # 暂时停用心跳包机制
+                    # logging.info(f"Connection with {client_address} is closed.")
+                    # if username: self.user_manager.set_offline(username)
+                    # client_socket.close()
             except ConnectionResetError:
                 logging.info(f"Connection with {client_address} is closed.")
                 if username: self.user_manager.set_offline(username)
@@ -55,6 +67,7 @@ class Server:
                 break
             except socket.error:
                 logging.info(f"Connection with {client_address} is closed.")
+                client_socket.close()
                 break
     @staticmethod
     def send_message(client_socket, message):
@@ -88,6 +101,10 @@ class MessageHandler:
                 message = self.handle_delete_account(message)
             elif action == 'send_personal_message':
                 message = self.handle_send_personal_message(message)
+            elif action == 'add_friend':
+                message = self.handle_add_friend(message)
+            elif action == 'delete_friend':
+                message = self.handle_delete_friend(message)
         if message: Server.send_message(client_socket, message)
         
     
@@ -129,6 +146,22 @@ class MessageHandler:
         else:
             success, response_text = False, 'Receiver is not Online'
         return mb.build_response(success, response_text, request_timestamp)
+    
+    def handle_add_friend(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        username = request_data.get('username')
+        friend = request_data.get('friend')
+        success, response_text = self.user_manager.add_friend(username, friend)
+        return mb.build_response(success, response_text, request_timestamp)
+    
+    def handle_delete_friend(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        username = request_data.get('username')
+        frient = request_data.get('frient')
+        success, response_text = self.user_manager.delete_friend(username, frient)
+        return mb.build_response(success, response_text, request_timestamp)
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
@@ -152,5 +185,8 @@ if __name__ == '__main__':
     else:
         ip_address = '172.31.238.212'
     print(ip_address)
+    app.run(debug=True)
+    user_manager = usermanager.UserManager()
     server = Server(ip_address, 9999)
     server.start()
+    

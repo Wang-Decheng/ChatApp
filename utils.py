@@ -98,6 +98,16 @@ class MessageBuilder:
     def build_delete_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.__build_request('delete', request_data)
+    
+    @staticmethod
+    def build_add_friend_request(username, friend):
+        request_data = {'username': username,'friend': friend}
+        return MessageBuilder.__build_request('add_friend', request_data)
+    
+    @staticmethod
+    def build_remove_friend_request(username, friend):
+        request_data = {'username': username,'friend': friend}
+        return MessageBuilder.__build_request('remove_friend', request_data)
 
     @staticmethod
     def build_send_personal_message_request(sender, receiver, content):
@@ -121,4 +131,5 @@ class MessageBuilder:
         }
         return MessageBuilder.__build_request('send_group_messager', message_data)
 
+    
     # endregion
