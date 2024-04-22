@@ -15,25 +15,33 @@ const createLoginWindow = () => {
     },
   });
 
-  // 加载 index.html
+  // 加载html
   mainWindow.loadFile("login.html");
 
   // 打开开发工具
   mainWindow.webContents.openDevTools()
 };
 
-// 这段程序将会在 Electron 结束初始化和创建浏览器窗口的时候调用,部分 API 在 ready 事件触发后才能使用。
-app.whenReady().then(() => {
-  createLoginWindow();
-
-  app.on("activate", () => {
-    // 在 macOS 系统内, 如果没有已开启的应用窗口,点击托盘图标时通常会重新创建一个新窗口
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+const createChatWindow = () => {
+  const mainWindow = new BrowserWindow({
+    width: 600,
+    height: 1000,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
   });
 
-  //监听渲染进程的register事件
-  ipcMain.on("register", (event, data) => {
-    const { username, password } = data;
+  // 加载html
+  mainWindow.loadFile("chatWin.html");
+
+  // 打开开发工具
+  mainWindow.webContents.openDevTools()
+
+};
+
+const register = (event, data) => {
+  const { username, password } = data;
     // 将username和password封装成json
     const registerRequest = MessageBuilder.build_register_request(username, password);
     const registerRequestJson = JSON.stringify(registerRequest);
@@ -83,10 +91,10 @@ app.whenReady().then(() => {
     client.on('close', () => {
       console.log('Connection to server closed');
     });
-  });
+};
 
-  ipcMain.on("login", (event, data) => {
-    const { username, password } = data;
+const login = (event, data) => {
+  const { username, password } = data;
     // 将username和password封装成json
     const loginRequest = MessageBuilder.build_login_request(username, password);
     const loginRequestJson = JSON.stringify(loginRequest);
@@ -112,6 +120,9 @@ app.whenReady().then(() => {
             message: jsonData.message,
             buttons: ['确定']
           });
+
+          chatWindow = createChatWindow();
+
         } else {
           dialog.showMessageBox({
             type: 'info',
@@ -135,7 +146,21 @@ app.whenReady().then(() => {
     client.on('close', () => {
       console.log('Connection to server closed');
     });
+};
+
+// 这段程序将会在 Electron 结束初始化和创建浏览器窗口的时候调用,部分 API 在 ready 事件触发后才能使用。
+app.whenReady().then(() => {
+  loginWindow = createLoginWindow();
+
+  app.on("activate", () => {
+    // 在 macOS 系统内, 如果没有已开启的应用窗口,点击托盘图标时通常会重新创建一个新窗口
+    if (BrowserWindow.getAllWindows().length === 0) createLoginWindow();
   });
+
+  //监听渲染进程的register事件
+  ipcMain.on("register", register);
+
+  ipcMain.on("login", login);
 
 });
 
