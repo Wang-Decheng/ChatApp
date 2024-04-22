@@ -15,6 +15,8 @@ import pickle
 sys.path.append(".")
 from utils import MessageBuilder as mb
 
+global_lock = threading.Lock()
+
 
 class CurrentUser:
     username = None
@@ -61,7 +63,7 @@ class ChatConnection:
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
         while True:
-            try:  # update 增加本地发送的消息显示
+            try:
                 # message_json = self.server_socket.recv(1024).decode('utf-8')
                 # logging.info(f"Received message: {message_json}")
                 # message = json.loads(message_json)
@@ -118,7 +120,7 @@ class ChatConnection:
     def send_message(self, message):
         if not self.server_socket:
             self.start_connect()
-        with self.lock:
+        with global_lock:
             try:
                 # self.server_socket.send(json.dumps(message).encode('utf-8'))
                 message_bytes = pickle.dumps(message)
@@ -416,6 +418,12 @@ class ChatPage(QWidget):
             response = self.parent.get_response(timestamp)
         else:
             response = {'success': False, 'message': 'Can not send to yourself'}
+
+        if response['success']:
+            receiver = message['request_data']['receiver']
+            content = message['request_data']['content']
+            formatted_timestamp = datetime.fromtimestamp(message['timestamp']).strftime("%m-%d %H:%M")
+            self.display_message(f"[{formatted_timestamp}]You->{receiver}:\n{content}")
         self.parent.show_response(response)
 
     def display_message(self, message):
@@ -456,21 +464,36 @@ class ChatPage(QWidget):
             if not response['success']:
                 break
 
-            with open(file_path, "rb") as fp:
-                while True:
-                    data = fp.read(2000)
-                    if not data:
-                        break
-                    file_data_packet = mb.build_file_data(
-                        username, receiver, os.path.basename(file_path), data
-                    )
-                    self.parent.connection.send_message(file_data_packet)
+            threading.Thread(
+                target=self.__send_file_content, args=(username, receiver, file_path), daemon=True
+            ).start()
 
-            self.display_message(file_path)  # test
+            # with open(file_path, "rb") as fp:
+            #     while True:
+            #         data = fp.read(2000)
+            #         if not data:
+            #             break
+            #         file_data_packet = mb.build_file_data(
+            #             username, receiver, os.path.basename(file_path), data
+            #         )
+            #         self.parent.connection.send_message(file_data_packet)
+
+            self.display_message(f'File {os.path.basename(file_path)} prepared to send.')  # test
 
             break
 
-        self.parent.show_response(response)
+        # self.parent.show_response(response)
+
+    def __send_file_content(self, username, receiver, file_path):
+        with open(file_path, 'rb') as fp:
+            while True:
+                data = fp.read(4000)
+                if not data:
+                    break
+                file_data_packet = mb.build_file_data(username, receiver, os.path.basename(file_path), data)
+                self.parent.connection.send_message(file_data_packet)
+
+        self.display_message(f"File {os.path.basename(file_path)} sent successfully.")
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):

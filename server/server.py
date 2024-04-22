@@ -34,7 +34,9 @@ class Server:
                 message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
                 message_bytes = client_socket.recv(message_length)
                 message = pickle.loads(message_bytes)
-                if message['type'] != 'file_data':
+                if message['type'] == 'request' and message['action'] == 'file_data':
+                    logging.info(f"server receive message: file_data")
+                else:
                     logging.info(f"server receive message: {message}")
 
                 last_heartbeat_time = datetime.now()
@@ -162,7 +164,7 @@ class MessageHandler:
             receiver_client = self.user_manager.get_socket(receiver)
             success = Server.send_message(receiver_client, request_data)
             if success:
-                response_text = 'file transfer request sent successfully'
+                response_text = 'file transfer request sent'
         else:
             success, response_text = False, 'Receiver is not Online'
         return mb.build_response(success, response_text, request_timestamp)
