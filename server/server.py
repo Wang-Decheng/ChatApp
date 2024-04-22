@@ -155,7 +155,6 @@ class MessageHandler:
             success, response_text = False, 'Receiver is not Online'
         return mb.build_response(success, response_text, request_timestamp)
 
-    # TODO 增加文件传输请求包、文件内容包、文件接收确认包
     def handle_file_transfer_header(self, message):
         request_data = message['request_data']
         request_timestamp = message['timestamp']

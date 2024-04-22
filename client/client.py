@@ -108,7 +108,7 @@ class ChatConnection:
 
             self.parent.chat_page.display_message(
                 message['file_name'] + ' ' + str(message['file_size'])
-            )  # test
+            )  # test 输出传输文件信息
 
         if message['type'] == 'file_data':
             file_path = os.path.dirname(__file__) + '\\' + message['file_name']
