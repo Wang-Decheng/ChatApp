@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import logging
 import sys
+import pickle
 
 import user_manager as usermanager
 
@@ -27,9 +28,15 @@ class Server:
         username = None
         while True:
             try:
-                message_json = client_socket.recv(1024).decode('utf-8')
-                logging.info("server receive message:" + message_json)
-                message = json.loads(message_json)
+                # message_json = client_socket.recv(1024).decode('utf-8')
+                # logging.info("server receive message:" + message_json)
+                # message = json.loads(message_json)
+                message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
+                message_bytes = client_socket.recv(message_length)
+                message = pickle.loads(message_bytes)
+                if message['type'] != 'file_data':
+                    logging.info(f"server receive message: {message}")
+
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -61,9 +68,12 @@ class Server:
 
     @staticmethod
     def send_message(client_socket, message):
-        if not message:
+        if message is None:  # 空消息不发送
             return
-        return client_socket.send(json.dumps(message).encode('utf-8'))
+        message_bytes = pickle.dumps(message)
+        client_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+        return client_socket.send(message_bytes)
+        # return client_socket.send(json.dumps(message).encode('utf-8'))
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -101,7 +111,6 @@ class MessageHandler:
                     response = self.handle_file_transfer_header(message)
                 case 'file_data':
                     response = self.handle_file_data(message)
-            # TODO 增加文件内容包、文件接收确认包
         if message:
             Server.send_message(client_socket, response)
 
@@ -164,7 +173,7 @@ class MessageHandler:
         receiver = request_data.get('receiver')
         receiver_client = self.user_manager.get_socket(receiver)
         success = Server.send_message(receiver_client, request_data)
-        return None  # XXX
+        return None
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):

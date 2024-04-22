@@ -62,9 +62,15 @@ class ChatConnection:
         self.server_socket.settimeout(15)
         while True:
             try:  # update 增加本地发送的消息显示
-                message_json = self.server_socket.recv(1024).decode('utf-8')
-                logging.info(f"Received message: {message_json}")
-                message = json.loads(message_json)
+                # message_json = self.server_socket.recv(1024).decode('utf-8')
+                # logging.info(f"Received message: {message_json}")
+                # message = json.loads(message_json)
+                message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
+                message_bytes = self.server_socket.recv(message_length)
+                message = pickle.loads(message_bytes)
+                if message['type'] != 'file_data':
+                    logging.info(f"Received message: {message}")
+
                 last_heartbeat_time = datetime.now()
                 message_type = message.get('type')
                 if message_type == 'heartbeat':
@@ -93,18 +99,19 @@ class ChatConnection:
             string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
             self.parent.chat_page.display_message(string)
 
-        # TODO 增加文件传输请求包、文件内容包的处理
         if message['type'] == 'file_tranfer_header':
             file_path = os.path.dirname(__file__) + '\\' + message['file_name']
             with open(file_path, 'wb') as fp:
                 pass
 
-            self.parent.chat_page.display_message(message['file_name'])  # test
+            self.parent.chat_page.display_message(
+                message['file_name'] + ' ' + str(message['file_size'])
+            )  # test
 
         if message['type'] == 'file_data':
             file_path = os.path.dirname(__file__) + '\\' + message['file_name']
             with open(file_path, 'ab') as fp:
-                data = message['file_content'].encode('utf-8')
+                data = message['file_content']
                 fp.write(data)
             pass
 
@@ -113,7 +120,10 @@ class ChatConnection:
             self.start_connect()
         with self.lock:
             try:
-                self.server_socket.send(json.dumps(message).encode('utf-8'))
+                # self.server_socket.send(json.dumps(message).encode('utf-8'))
+                message_bytes = pickle.dumps(message)
+                self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+                self.server_socket.send(message_bytes)
             except Exception as e:
                 logging.error(str(e))
 
@@ -436,7 +446,8 @@ class ChatPage(QWidget):
                 break
 
             request = mb.build_file_transfer_header(
-                username, receiver, os.path.basename(file_path), os.path.getsize(file_path), None
+                username, receiver, os.path.basename(file_path),
+                os.stat(file_path).st_size, None
             )
             timestamp = request['timestamp']
             self.parent.connection.send_message(request)
@@ -445,14 +456,15 @@ class ChatPage(QWidget):
             if not response['success']:
                 break
 
-            # BUG
             with open(file_path, "rb") as fp:
                 while True:
-                    data = fp.read(800)
+                    data = fp.read(2000)
                     if not data:
                         break
-                    file_data = mb.build_file_data(username, receiver, os.path.basename(file_path), data)
-                    self.parent.connection.send_message(file_data)
+                    file_data_packet = mb.build_file_data(
+                        username, receiver, os.path.basename(file_path), data
+                    )
+                    self.parent.connection.send_message(file_data_packet)
 
             self.display_message(file_path)  # test
 
