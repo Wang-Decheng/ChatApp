@@ -1,4 +1,4 @@
-//const { ipcRenderer } = require("electron");
+const { ipcRenderer } = require("electron");
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("1111")

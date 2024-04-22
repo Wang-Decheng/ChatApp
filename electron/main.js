@@ -129,7 +129,7 @@ app.whenReady().then(() => {
         });
       }
 
-      client.destroy();
+      //client.destroy();
     })
     
     client.on('close', () => {
