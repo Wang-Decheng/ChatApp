@@ -58,12 +58,13 @@ class MessageBuilder:
 
     # 生成响应信息
     @staticmethod
-    def build_response(success, message, request_timestamp):
+    def build_response(success, message, request_timestamp, data=None):
         message_data = {
             'type': 'response',
             'timestamp': request_timestamp,
             'success': success,
-            'message': message
+            'message': message,
+            'data': data
         }
         return message_data
 
@@ -90,6 +91,10 @@ class MessageBuilder:
     def build_login_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.__build_request('login', request_data)
+    
+    def build_logout_request(username):
+        request_data = {'username': username}
+        return MessageBuilder.__build_request('logout', request_data)
 
     @staticmethod
     def build_register_request(username, password):
@@ -97,9 +102,9 @@ class MessageBuilder:
         return MessageBuilder.__build_request('register', request_data)
 
     @staticmethod
-    def build_delete_request(username, password):
+    def build_delete_account_request(username, password):
         request_data = {'username': username, 'password': password}
-        return MessageBuilder.__build_request('delete', request_data)
+        return MessageBuilder.__build_request('delete_account', request_data)
     
     @staticmethod
     def build_add_friend_request(username, friend):

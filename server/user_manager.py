@@ -85,11 +85,14 @@ class UserManager:
         return user is not None
     
     def get_friends(self, username):
+        is_exists = self.is_username_exist(username)
+        if not is_exists:
+            return False, 'User is not exist', None
         self.cursor.execute('SELECT friendname FROM friendship WHERE username = ?', (username,))
         friends = self.cursor.fetchall()
         if not friends:
             return []
-        return [friend[0] for friend in friends]
+        return True, 'Get friends list successfully', [friend[0] for friend in friends]
     
     def add_friend(self, username, friend_username):
         if not self.is_username_exist(friend_username):

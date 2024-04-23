@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 import logging
 import sys
-import pickle
 
 import user_manager as usermanager
 
@@ -107,9 +106,11 @@ class MessageHandler:
             match action:
                 case 'login':
                     response = self.handle_login(message, client_socket)
+                case 'logout':
+                    response = self.handle_logout(message)
                 case 'register':
                     response = self.handle_register(message)
-                case 'delete':
+                case 'delete_account':
                     response = self.handle_delete_account(message)
                 case 'send_personal_message':
                     response = self.handle_send_personal_message(message)
@@ -136,6 +137,15 @@ class MessageHandler:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
         return mb.build_response(success, response_text, request_timestamp)
+    
+
+    def handle_logout(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        username = request_data.get('username')
+        if self.user_manager.is_online(username):
+            self.user_manager.set_offline(username)
+        return mb.build_response(True, 'logout success', request_timestamp)
 
     def handle_register(self, message):
         request_data = message['request_data']
@@ -177,9 +187,13 @@ class MessageHandler:
         request_data = message['request_data']
         request_timestamp = message['timestamp']
         username = request_data.get('username')
-        response_data = self.user_manager.get_friends(username)
-        success = True if response_data is not None else False
-        return mb.build_response(success, response_data, request_timestamp)
+        success, response_text, response_data = self.user_manager.get_friends(username)
+        user_status_dict = {}
+        for user in response_data:
+            status = self.user_manager.is_online(user)
+            user_status_dict[user] = status
+        return mb.build_response(success, response_text, request_timestamp, user_status_dict)
+
     
     def handle_delete_friend(self, message):
         request_data = message['request_data']

@@ -139,3 +139,4 @@ dist
 .vscode/
 image/
 .env
+.bin

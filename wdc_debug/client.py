@@ -211,6 +211,7 @@ def debug_get_friends():
     connection.send_message(message)
     response = connection.get_response(message['timestamp'])
     connection.show_response(response)
+    print(response['data'])
     # print(json.dumps(response))
 
 if __name__ == '__main__':
@@ -219,4 +220,3 @@ if __name__ == '__main__':
     debug_login_as_test(connection, sys.argv[1])
     debug_add_wdc(connection)
     debug_get_friends()
-    

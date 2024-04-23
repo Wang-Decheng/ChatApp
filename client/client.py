@@ -142,7 +142,7 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit=1):
+    def get_response(self, request_timestamp, timelimit = 1):
         start_time = time.time()
         while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
             if (time.time() - start_time > timelimit): break
@@ -329,7 +329,6 @@ class LoginPage(QWidget):
         if self.parent.show_response(response):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
-
 
 class DeletePage(QWidget):
 
