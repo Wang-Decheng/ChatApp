@@ -139,7 +139,7 @@ const login = (event, data) => {
             buttons: ['确定']
           });
 
-          chatWindow = createFriendsWindow();
+          friendsWindow = createFriendsWindow();
 
         } else {
           dialog.showMessageBox({
