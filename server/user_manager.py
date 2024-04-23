@@ -1,3 +1,4 @@
+import logging
 import sys
 import sqlite3
 import bcrypt
@@ -116,9 +117,11 @@ class UserManager:
 
     
     def set_online(self, username, socket):
+        logging.info(f'{username} is online')
         self.online_users[username] = socket
 
     def set_offline(self, username):
+        logging.info(f'{username} is offline')
         if username in self.online_users:
             del self.online_users[username]
 

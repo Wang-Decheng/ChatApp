@@ -124,10 +124,10 @@ class ChatConnection:
             try:
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
-                # self.server_socket.send(message_json.encode('utf-8'))
-                message_bytes = pickle.dumps(message)
-                self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
-                self.server_socket.send(message_bytes)
+                self.server_socket.send(message_json.encode('utf-8'))
+                # message_bytes = pickle.dumps(message)
+                # self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+                # self.server_socket.send(message_bytes)
             except Exception as e:
                 logging.error(str(e))
 
