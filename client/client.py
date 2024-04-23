@@ -1,6 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit,  QHBoxLayout
-from PyQt5.QtCore import Qt,  pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog
+from PyQt5.QtCore import Qt, pyqtSignal
 import socket
 import json
 import os
@@ -9,9 +9,14 @@ import logging
 import time
 import queue
 from datetime import datetime
+import struct
+import pickle
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
+
+global_lock = threading.Lock()
+
 
 class CurrentUser:
     username = None
@@ -19,7 +24,7 @@ class CurrentUser:
     @staticmethod
     def set_username(username):
         CurrentUser.username = username
-        
+
     @staticmethod
     def del_username():
         CurrentUser.username = None
@@ -28,8 +33,10 @@ class CurrentUser:
     def get_username():
         return CurrentUser.username
 
+
 class ChatConnection:
-    def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
+
+    def __init__(self, host, port, heartbeat_interval=10, timeout=30):
         self.host = host
         self.port = port
         self.server_socket = None
@@ -37,6 +44,8 @@ class ChatConnection:
         self.timeout = timeout
         self.lock = threading.Lock()
         self.response_cache = None
+        self.parent = None
+
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -49,15 +58,21 @@ class ChatConnection:
             if self.server_socket:
                 self.server_socket.close()
                 self.server_socket = None
-    
+
     def handle_server(self):
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
         while True:
             try:
-                message_json = self.server_socket.recv(1024).decode('utf-8')
-                logging.info(f"Received message: {message_json}")
-                message = json.loads(message_json)
+                # message_json = self.server_socket.recv(1024).decode('utf-8')
+                # logging.info(f"Received message: {message_json}")
+                # message = json.loads(message_json)
+                message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
+                message_bytes = self.server_socket.recv(message_length)
+                message = pickle.loads(message_bytes)
+                if message['type'] != 'file_data':
+                    logging.info(f"Received message: {message}")
+
                 last_heartbeat_time = datetime.now()
                 message_type = message.get('type')
                 if message_type == 'heartbeat':
@@ -83,19 +98,39 @@ class ChatConnection:
             timestamp = message['timestamp']
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
-            self.parent.chat_page.message_display.setText(f"[{formatted_timestamp}]{sender}->You:{content}")
-    
+            string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
+            self.parent.chat_page.display_message(string)
+
+        if message['type'] == 'file_tranfer_header':
+            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
+            with open(file_path, 'wb') as fp:
+                pass
+
+            self.parent.chat_page.display_message(
+                message['file_name'] + ' ' + str(message['file_size'])
+            )  # test 输出传输文件信息
+
+        if message['type'] == 'file_data':
+            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
+            with open(file_path, 'ab') as fp:
+                data = message['file_content']
+                fp.write(data)
+            pass
+
     def send_message(self, message):
         if not self.server_socket:
             self.start_connect()
-        with self.lock:
+        with global_lock:
             try:
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
-                self.server_socket.send(message_json.encode('utf-8'))
+                # self.server_socket.send(message_json.encode('utf-8'))
+                message_bytes = pickle.dumps(message)
+                self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+                self.server_socket.send(message_bytes)
             except Exception as e:
                 logging.error(str(e))
-    
+
     def send_heartbeat(self):
         while self.server_socket is not None:
             try:
@@ -106,17 +141,20 @@ class ChatConnection:
             except Exception as e:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
-    
-    def get_response(self, request_timestamp, timelimit = 1):
+
+    def get_response(self, request_timestamp, timelimit=1):
         start_time = time.time()
-        while(self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
-            if(time.time() - start_time > timelimit): break
+        while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
+            if (time.time() - start_time > timelimit): break
         if self.response_cache['timestamp'] == request_timestamp:
             return self.response_cache
-        else: return False, 'No Response'
+        else:
+            return False, 'No Response'
+
 
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)
+
     def __init__(self, host, port):
         super().__init__()
 
@@ -147,21 +185,28 @@ class ChatClient(QMainWindow):
         self.stack.addWidget(self.delete_page)
         self.stack.addWidget(self.chat_page)
         # endregion
+
     # region 切换页面
     def show_login_page(self):
         self.stack.setCurrentWidget(self.login_page)
         self.clear_text(self.login_page)
+
     def show_register_page(self):
         self.stack.setCurrentWidget(self.register_page)
         self.clear_text(self.register_page)
+
     def show_delete_page(self):
         self.stack.setCurrentWidget(self.delete_page)
         self.clear_text(self.delete_page)
+
     def show_main_page(self):
         self.stack.setCurrentWidget(self.main_page)
+
     def show_chat_page(self):
         self.stack.setCurrentWidget(self.chat_page)
-    # end region    
+        self.clear_text(self.chat_page)  # 在打开聊天页面时清理之前的聊天痕迹
+
+    # end region
     @staticmethod
     def clear_text(widget):
         if isinstance(widget, (QLineEdit, QTextEdit)):
@@ -169,9 +214,9 @@ class ChatClient(QMainWindow):
         elif isinstance(widget, QWidget):
             for child in widget.findChildren((QLineEdit, QTextEdit)):
                 child.clear()
-    
+
     def show_response(self, response):
-        if not response:return
+        if not response: return
         if response['success']:
             message = response['message']
             QMessageBox.information(self, "Success", message)
@@ -179,11 +224,13 @@ class ChatClient(QMainWindow):
             error_message = response['message']
             QMessageBox.critical(self, "Error", error_message)
         return response['success']
-    
+
     def get_response(self, request_timestamp):
         return self.connection.get_response(request_timestamp)
 
+
 class MainPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -202,7 +249,9 @@ class MainPage(QWidget):
 
         self.setLayout(layout)
 
+
 class RegisterPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -240,7 +289,9 @@ class RegisterPage(QWidget):
         if self.parent.show_response(response):
             self.parent.show_main_page()
 
+
 class LoginPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -279,7 +330,9 @@ class LoginPage(QWidget):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
 
+
 class DeletePage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -310,8 +363,10 @@ class DeletePage(QWidget):
         if not username.strip() or not password.strip():
             QMessageBox.critical(self, "Error", "Username and password cannot be blank.")
             return
-        confirmation = QMessageBox.question(self, "Confirmation", "Are you sure you want to delete your account?",
-                                    QMessageBox.Yes | QMessageBox.No)
+        confirmation = QMessageBox.question(
+            self, "Confirmation", "Are you sure you want to delete your account?",
+            QMessageBox.Yes | QMessageBox.No
+        )
         if confirmation == QMessageBox.Yes:
             message = mb.build_delete_request(username, password)
             timestamp = message['timestamp']
@@ -320,22 +375,26 @@ class DeletePage(QWidget):
             if self.parent.show_response(response):
                 self.parent.show_main_page()
 
+
 class ChatPage(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
 
         self.chat_label = QLabel("Chat Page")
-        self.message_display = QLabel()
-        self.message_display.setMinimumHeight(100)
+        self.message_display = QTextEdit()
+        self.message_display.setReadOnly(True)
         self.send_to_label = QLabel("Send to:")
         self.receiver_entry = QLineEdit()
         self.message_entry = QTextEdit()
         self.back_button = QPushButton("Back")
-        self.send_message_button = QPushButton("Send Message") 
+        self.send_message_button = QPushButton("Send Message")
+        self.send_file_button = QPushButton("Send File")
 
         self.back_button.clicked.connect(parent.show_main_page)
         self.send_message_button.clicked.connect(self.send_message)
+        self.send_file_button.clicked.connect(self.send_file)
 
         layout = QVBoxLayout()
         layout.addWidget(self.chat_label, alignment=Qt.AlignCenter)
@@ -346,6 +405,7 @@ class ChatPage(QWidget):
         layout.addLayout(send_to_layout)
         layout.addWidget(self.message_entry)
         layout.addWidget(self.send_message_button)
+        layout.addWidget(self.send_file_button)
         layout.addWidget(self.back_button)
         self.setLayout(layout)
 
@@ -358,8 +418,85 @@ class ChatPage(QWidget):
             timestamp = message['timestamp']
             self.parent.connection.send_message(message)
             response = self.parent.get_response(timestamp)
-        else: response = {'success':False, 'message': 'Can not send to yourself'}
+        else:
+            response = {'success': False, 'message': 'Can not send to yourself'}
+
+        if response['success']:
+            receiver = message['request_data']['receiver']
+            content = message['request_data']['content']
+            formatted_timestamp = datetime.fromtimestamp(message['timestamp']).strftime("%m-%d %H:%M")
+            self.display_message(f"[{formatted_timestamp}]You->{receiver}:\n{content}")
         self.parent.show_response(response)
+
+    def display_message(self, message):
+        message = message + '\n'
+        self.message_display.append(message)
+
+    def send_file(self):  # TODO
+        username = CurrentUser.get_username()
+        receiver = self.receiver_entry.text()
+        response = None
+
+        while True:
+            if not receiver:  # 若没有输入接收者，则返回
+                response = {'success': False, 'message': 'Please input the receiver username'}
+                break
+            if username == receiver:  # 若输入的接收者是自己，则返回
+                response = {'success': False, 'message': 'Can not send file to yourself'}
+                break
+
+            options = QFileDialog.Options()
+            file_path, _ = QFileDialog.getOpenFileName(self, "文件选择", "", "All Files (*)", options=options)
+            if not file_path:  # 若没有选择文件，则返回
+                response = {'success': False, 'message': 'No file selected'}
+                break
+
+            if not os.path.isfile(file_path):
+                response = {'success': False, 'message': 'It\'s not File'}
+                break
+
+            request = mb.build_file_transfer_header(
+                username, receiver, os.path.basename(file_path),
+                os.stat(file_path).st_size, None
+            )
+            timestamp = request['timestamp']
+            self.parent.connection.send_message(request)
+            response = self.parent.get_response(timestamp)
+
+            if not response['success']:
+                break
+
+            threading.Thread(
+                target=self.__send_file_content, args=(username, receiver, file_path), daemon=True
+            ).start()
+
+            # with open(file_path, "rb") as fp:
+            #     while True:
+            #         data = fp.read(2000)
+            #         if not data:
+            #             break
+            #         file_data_packet = mb.build_file_data(
+            #             username, receiver, os.path.basename(file_path), data
+            #         )
+            #         self.parent.connection.send_message(file_data_packet)
+
+            self.display_message(f'File {os.path.basename(file_path)} prepared to send.')  # test
+
+            break
+
+        # self.parent.show_response(response)
+
+    def __send_file_content(self, username, receiver, file_path):
+        with open(file_path, 'rb') as fp:
+            while True:
+                data = fp.read(4000)
+                if not data:
+                    break
+                file_data_packet = mb.build_file_data(username, receiver, os.path.basename(file_path), data)
+                self.parent.connection.send_message(file_data_packet)
+
+        self.display_message(f"File {os.path.basename(file_path)} sent successfully.")
+
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
@@ -370,22 +507,25 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         formatter = logging.Formatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-        
+
         args = sys.argv
         if len(args) >= 1:
             logfilename = args[1] + '-debug.log'
-        else: logfilename = 'c-debug.log'
+        else:
+            logfilename = 'c-debug.log'
         file_handler = logging.FileHandler(logfilename)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
 
 def debug_func(client):
     connection = client.connection
     args = sys.argv
     if len(args) >= 1:
         username = 'user' + args[1]
-    else: username = 'user'
+    else:
+        username = 'user'
     password = '123'
     register_msg = mb.build_register_request(username, password)
     login_msg = mb.build_login_request(username, password)
@@ -395,6 +535,7 @@ def debug_func(client):
     CurrentUser.set_username(username)
     client.show_chat_page()
     client.setWindowTitle(username)
+
 
 if __name__ == '__main__':
     config_logging()
@@ -407,5 +548,5 @@ if __name__ == '__main__':
     client = ChatClient(ip_address, 9999)
     client.show()
     if os.environ.get('DEBUG') == 'True':
-        debug_func(client)  
+        debug_func(client)
     sys.exit(app.exec_())

@@ -61,9 +61,10 @@ class MessageBuilder:
     def build_response(success, message, request_timestamp):
         message_data = {
             'type': 'response',
-            'timestamp':request_timestamp, 
+            'timestamp': request_timestamp,
             'success': success,
-            'message': message}
+            'message': message
+        }
         return message_data
 
     # 生成心跳包
@@ -80,7 +81,8 @@ class MessageBuilder:
             'type': 'request',
             'action': action,
             'timestamp': time.time(),
-            'request_data': request_data}
+            'request_data': request_data
+        }
         return message_data
 
     # 根据请求类型的不同生成不同的请求内容对象，然后生成请求信息，下同
@@ -120,5 +122,31 @@ class MessageBuilder:
             'timestamp': time.time()
         }
         return MessageBuilder.__build_request('send_group_messager', message_data)
+
+    # MARK 增加文件传输请求数据包、文件内容数据包等
+    @staticmethod
+    def build_file_transfer_header(sender, receiver, file_name, file_size, accept_or_refuse):
+        message_data = {
+            'type': 'file_tranfer_header',
+            'sender': sender,
+            'receiver': receiver,
+            'file_name': file_name,
+            'file_size': file_size,
+            'accept_or_refuse': accept_or_refuse,
+            'timestamp': time.time()
+        }
+        return MessageBuilder.__build_request('file_transfer_header', message_data)
+
+    @staticmethod
+    def build_file_data(sender, receiver, file_name, file_content):
+        message_data = {
+            'type': 'file_data',
+            'sender': sender,
+            'receiver': receiver,
+            'file_name': file_name,
+            'file_content': file_content,
+            'timestamp': time.time()
+        }
+        return MessageBuilder.__build_request('file_data', message_data)
 
     # endregion
