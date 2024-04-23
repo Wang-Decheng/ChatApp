@@ -22,6 +22,24 @@ const createLoginWindow = () => {
   mainWindow.webContents.openDevTools()
 };
 
+const createFriendsWindow = () => {
+  const mainWindow = new BrowserWindow({
+    width: 400,
+    height: 1000,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  // 加载html
+  mainWindow.loadFile("friendsWin.html");
+
+  // 打开开发工具
+  mainWindow.webContents.openDevTools()
+
+};
+
 const createChatWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 600,
@@ -121,7 +139,7 @@ const login = (event, data) => {
             buttons: ['确定']
           });
 
-          chatWindow = createChatWindow();
+          chatWindow = createFriendsWindow();
 
         } else {
           dialog.showMessageBox({
