@@ -107,6 +107,11 @@ class MessageBuilder:
         return MessageBuilder.__build_request('add_friend', request_data)
     
     @staticmethod
+    def build_get_friends_request(username):
+        request_data = {'username': username}
+        return MessageBuilder.__build_request('get_friends', request_data)
+    
+    @staticmethod
     def build_remove_friend_request(username, friend):
         request_data = {'username': username,'friend': friend}
         return MessageBuilder.__build_request('remove_friend', request_data)

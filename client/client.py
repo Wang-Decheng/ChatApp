@@ -64,12 +64,12 @@ class ChatConnection:
         self.server_socket.settimeout(15)
         while True:
             try:
-                # message_json = self.server_socket.recv(1024).decode('utf-8')
-                # logging.info(f"Received message: {message_json}")
-                # message = json.loads(message_json)
-                message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
-                message_bytes = self.server_socket.recv(message_length)
-                message = pickle.loads(message_bytes)
+                message_json = self.server_socket.recv(1024).decode('utf-8')
+                logging.info(f"Received message: {message_json}")
+                message = json.loads(message_json)
+                # message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
+                # message_bytes = self.server_socket.recv(message_length)
+                # message = pickle.loads(message_bytes)
                 if message['type'] != 'file_data':
                     logging.info(f"Received message: {message}")
 

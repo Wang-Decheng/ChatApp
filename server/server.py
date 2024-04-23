@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 import logging
 import sys
-from flask import Flask, jsonify, request
 import pickle
 
 import user_manager as usermanager
@@ -28,17 +27,16 @@ class Server:
         username = None
         while True:
             try:
-                # message_json = client_socket.recv(1024).decode('utf-8')
-                # logging.info("server receive message:" + message_json)
-                # message = json.loads(message_json)
-                message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
-                message_bytes = client_socket.recv(message_length)
-                message = pickle.loads(message_bytes)
-                if message['type'] == 'request' and message['action'] == 'file_data':
-                    logging.info(f"server receive message: file_data")
-                else:
-                    logging.info(f"server receive message: {message}")
-
+                message_json = client_socket.recv(1024).decode('utf-8')
+                logging.info("server receive message:" + message_json)
+                message = json.loads(message_json)
+                # message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
+                # message_bytes = client_socket.recv(message_length)
+                # message = pickle.loads(message_bytes)
+                # if message['type'] == 'request' and message['action'] == 'file_data':
+                #     logging.info(f"server receive message: file_data")
+                # else:
+                #     logging.info(f"server receive message: {message}")
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -76,10 +74,12 @@ class Server:
     def send_message(client_socket, message):
         if message is None:  # 空消息不发送
             return
-        message_bytes = pickle.dumps(message)
-        client_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
-        return client_socket.send(message_bytes)
-        # return client_socket.send(json.dumps(message).encode('utf-8'))
+        # message_bytes = pickle.dumps(message)
+        # client_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+        # return client_socket.send(message_bytes)
+        message_json = json.dumps(message)
+        logging.info("Send message:" + message_json)
+        return client_socket.send(message_json.encode('utf-8'))
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -115,13 +115,15 @@ class MessageHandler:
                     response = self.handle_send_personal_message(message)
                 case 'add_friend':
                     response = self.handle_add_friend(message)
+                case 'get_friends':
+                    response = self.handle_get_friends(message)
                 case 'delete_friend':
                     response = self.handle_delete_friend(message)
                 case 'file_transfer_header':
                     response = self.handle_file_transfer_header(message)
                 case 'file_data':
                     response = self.handle_file_data(message)
-        if message:
+        if response:
             Server.send_message(client_socket, response)
 
     def handle_login(self, message, client_socket):
@@ -170,6 +172,14 @@ class MessageHandler:
         friend = request_data.get('friend')
         success, response_text = self.user_manager.add_friend(username, friend)
         return mb.build_response(success, response_text, request_timestamp)
+    
+    def handle_get_friends(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        username = request_data.get('username')
+        response_data = self.user_manager.get_friends(username)
+        success = True if response_data is not None else False
+        return mb.build_response(success, response_data, request_timestamp)
     
     def handle_delete_friend(self, message):
         request_data = message['request_data']

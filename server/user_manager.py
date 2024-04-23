@@ -86,6 +86,8 @@ class UserManager:
     def get_friends(self, username):
         self.cursor.execute('SELECT friendname FROM friendship WHERE username = ?', (username,))
         friends = self.cursor.fetchall()
+        if not friends:
+            return []
         return [friend[0] for friend in friends]
     
     def add_friend(self, username, friend_username):

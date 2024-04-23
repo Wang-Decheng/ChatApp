@@ -4,7 +4,6 @@ import json
 import os
 import threading
 import time
-import requests
 from datetime import datetime
 
 sys.path.append(".")
@@ -144,14 +143,9 @@ class ChatConnection:
         else: response = {'success':False, 'message': 'Can not send to yourself'}
         self.parent.show_response(response)
     def show_response(self, response):
-        if response['success']:
-            message = response['message']
-            print(f"success: {message}")
-            return True
-        else:
-            message = response['message']
-            print(f"error: {message}")
-            return False
+        success = 'sccess' if response['success']  else 'failure'
+        print(f"[Response]{success}: {response['message']}")
+        return response['success']
 
 def debug_func(client):
     connection = client.connection
@@ -188,19 +182,41 @@ def debug_send_add_friend_request(connection):
     response = connection.get_response(message['timestamp'])
     connection.show_response(response)
 
+def debug_login_as_test(connection, num):
+    username = 'test' + str(num)
+    password = '123'
+    message = mb.build_register_request(username, password)
+    connection.send_message(message)
+    time.sleep(0.3)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    message = mb.build_login_request(username, password)
+    connection.send_message(message)
+    time.sleep(0.3)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    CurrentUser.set_username(username)
+
+def debug_add_wdc(connection):
+    username = CurrentUser.get_username()
+    friend = 'wdc'
+    message = mb.build_add_friend_request(username, friend)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+
 def debug_get_friends():
-    url = 'http://127.0.0.1:5000/api/get_friends'
-    params = {'username': 'test1'}
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        # data = response.json()
-        print(response.text)
-    else:
-        print("Failed to get friends. Status code:", response.status_code)
+    username = CurrentUser.get_username()
+    message = mb.build_get_friends_request(username)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    # print(json.dumps(response))
 
 if __name__ == '__main__':
     ip_address = '127.0.0.1'
     connection = ChatConnection(ip_address, 9999)
-    debug_send_add_friend_request(connection)
+    debug_login_as_test(connection, sys.argv[1])
+    debug_add_wdc(connection)
     debug_get_friends()
     
