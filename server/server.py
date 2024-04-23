@@ -6,37 +6,39 @@ from datetime import datetime
 import logging
 import sys
 from flask import Flask, jsonify, request
+import pickle
 
 import user_manager as usermanager
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
 
-app = Flask(__name__)
-
-@app.route('/api/get_friends', methods=['GET'])
-def get_friends():
-    username = request.args.get('username')
-    friends = user_manager.get_friends(username)
-    return jsonify(friends)
-
 class Server:
-    def __init__(self, host, port,heartbeat_timeout = 30):
+
+    def __init__(self, host, port, heartbeat_timeout=30):
         self.host = host
         self.port = port
         self.timeout = heartbeat_timeout
         self.user_manager = usermanager.UserManager()
         self.messagehandler = MessageHandler(self.user_manager)
-    
+
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(15)
         last_heartbeat_time = datetime.now()
         username = None
         while True:
             try:
-                message_json = client_socket.recv(1024).decode('utf-8')
-                logging.info("server receive message:" + message_json)
-                message = json.loads(message_json)
+                # message_json = client_socket.recv(1024).decode('utf-8')
+                # logging.info("server receive message:" + message_json)
+                # message = json.loads(message_json)
+                message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
+                message_bytes = client_socket.recv(message_length)
+                message = pickle.loads(message_bytes)
+                if message['type'] == 'request' and message['action'] == 'file_data':
+                    logging.info(f"server receive message: file_data")
+                else:
+                    logging.info(f"server receive message: {message}")
+
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -69,10 +71,16 @@ class Server:
                 logging.info(f"Connection with {client_address} is closed.")
                 client_socket.close()
                 break
+
     @staticmethod
     def send_message(client_socket, message):
-        return client_socket.send(json.dumps(message).encode('utf-8'))
-    
+        if message is None:  # 空消息不发送
+            return
+        message_bytes = pickle.dumps(message)
+        client_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
+        return client_socket.send(message_bytes)
+        # return client_socket.send(json.dumps(message).encode('utf-8'))
+
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
@@ -85,29 +93,37 @@ class Server:
             client_handler = Thread(target=self.handle_client, args=(client_socket, client_address))
             client_handler.start()
 
+
 class MessageHandler:
+
     def __init__(self, user_manager):
         self.user_manager = user_manager
-    
+
     def handle_message(self, message, client_socket):
         type = message['type']
+        response = None
         if type == 'request':
             action = message['action']
-            if action == 'login':
-                message = self.handle_login(message, client_socket)
-            elif action == 'register':
-                message = self.handle_register(message)
-            elif action == 'delete':
-                message = self.handle_delete_account(message)
-            elif action == 'send_personal_message':
-                message = self.handle_send_personal_message(message)
-            elif action == 'add_friend':
-                message = self.handle_add_friend(message)
-            elif action == 'delete_friend':
-                message = self.handle_delete_friend(message)
-        if message: Server.send_message(client_socket, message)
-        
-    
+            match action:
+                case 'login':
+                    response = self.handle_login(message, client_socket)
+                case 'register':
+                    response = self.handle_register(message)
+                case 'delete':
+                    response = self.handle_delete_account(message)
+                case 'send_personal_message':
+                    response = self.handle_send_personal_message(message)
+                case 'add_friend':
+                    response = self.handle_add_friend(message)
+                case 'delete_friend':
+                    response = self.handle_delete_friend(message)
+                case 'file_transfer_header':
+                    response = self.handle_file_transfer_header(message)
+                case 'file_data':
+                    response = self.handle_file_data(message)
+        if message:
+            Server.send_message(client_socket, response)
+
     def handle_login(self, message, client_socket):
         request_data = message['request_data']
         request_timestamp = message['timestamp']
@@ -118,7 +134,7 @@ class MessageHandler:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
         return mb.build_response(success, response_text, request_timestamp)
-    
+
     def handle_register(self, message):
         request_data = message['request_data']
         request_timestamp = message['timestamp']
@@ -163,6 +179,50 @@ class MessageHandler:
         success, response_text = self.user_manager.delete_friend(username, frient)
         return mb.build_response(success, response_text, request_timestamp)
 
+    def handle_file_transfer_header(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        if self.user_manager.is_online(receiver):
+            receiver_client = self.user_manager.get_socket(receiver)
+            success = Server.send_message(receiver_client, request_data)
+            if success:
+                response_text = 'file transfer request sent'
+        else:
+            success, response_text = False, 'Receiver is not Online'
+        return mb.build_response(success, response_text, request_timestamp)
+
+    def handle_file_data(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        receiver_client = self.user_manager.get_socket(receiver)
+        success = Server.send_message(receiver_client, request_data)
+        return None
+
+
+    def handle_file_transfer_header(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        if self.user_manager.is_online(receiver):
+            receiver_client = self.user_manager.get_socket(receiver)
+            success = Server.send_message(receiver_client, request_data)
+            if success:
+                response_text = 'file transfer request sent'
+        else:
+            success, response_text = False, 'Receiver is not Online'
+        return mb.build_response(success, response_text, request_timestamp)
+
+    def handle_file_data(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
+        receiver = request_data.get('receiver')
+        receiver_client = self.user_manager.get_socket(receiver)
+        success = Server.send_message(receiver_client, request_data)
+        return None
+
+
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -172,11 +232,12 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         formatter = logging.Formatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-        
+
         file_handler = logging.FileHandler('s-debug.log')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
 
 if __name__ == '__main__':
     config_logging()
@@ -185,8 +246,6 @@ if __name__ == '__main__':
     else:
         ip_address = '172.31.238.212'
     print(ip_address)
-    app.run(debug=True)
     user_manager = usermanager.UserManager()
     server = Server(ip_address, 9999)
     server.start()
-    
