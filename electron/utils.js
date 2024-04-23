@@ -51,12 +51,13 @@ class Utils {
 }
 
 class MessageBuilder {
-    static build_response(success, message, request_timestamp) {
+    static build_response(success, message, request_timestamp, data = null) {
         return {
             type: 'response',
             timestamp: request_timestamp,
             success: success,
-            message: message
+            message: message,
+            data: data
         };
     }
 
@@ -94,7 +95,7 @@ class MessageBuilder {
 
     static build_get_friends_list_request(username) { //获取好友列表
         const request_data = { username: username };
-        return MessageBuilder.__buildRequest('get_friends', request_data);
+        return MessageBuilder.__build_request('get_friends', request_data);
     }
 
     static build_send_personal_message_request(sender, receiver, content) {
