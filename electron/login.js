@@ -1,7 +1,7 @@
 const { ipcRenderer } = require("electron");
 
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("1111")
+  //console.log("1111")
   document.getElementById("loginBtn").addEventListener("click", () => {
     console.log("loginBtn clicked");
     const username = document.getElementById("username").value;

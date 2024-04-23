@@ -92,6 +92,11 @@ class MessageBuilder {
         return MessageBuilder.__build_request('delete', request_data);
     }
 
+    static build_get_friends_list_request(username) { //获取好友列表
+        const request_data = { username: username };
+        return MessageBuilder.__buildRequest('get_friends', request_data);
+    }
+
     static build_send_personal_message_request(sender, receiver, content) {
         return MessageBuilder.__build_request('send_personal_message', {
             type: 'personal_message',

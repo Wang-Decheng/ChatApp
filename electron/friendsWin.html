@@ -1,185 +1,219 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>好友列表</title>
     <style>
-        /* 样式 */
-        .friend {
-            border-bottom: 1px solid #ccc;
-            padding: 10px;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-        }
+      /* 样式 */
+      .friend {
+        border-bottom: 1px solid #ccc;
+        padding: 10px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+      }
 
-        .top {
-            width: 100%;
-            height: 6%;
-            border-top-left-radius: 10px;
-            border-top-right-radius: 10px;
-            padding-left: 20px;
-            font-size: 20px;
-            line-height: 50px;
-            box-sizing: border-box;
-            font-weight: 550;
-            border-width: 0px;
-        }
+      .top {
+        width: 100%;
+        height: 6%;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+        padding-left: 20px;
+        font-size: 20px;
+        line-height: 50px;
+        box-sizing: border-box;
+        font-weight: 550;
+        border-width: 0px;
+      }
 
-        .middle {
-            width: 100%;
-            height: 85%;
-            position: relative;
-            box-sizing: border-box;
-            overflow: auto;
-            border-width: 0px;
-        }
+      .middle {
+        width: 100%;
+        height: 85%;
+        position: relative;
+        box-sizing: border-box;
+        overflow: auto;
+        border-width: 0px;
+      }
 
-        .line {
-            width: 100%;
-            border-top: 1px;
-            border-color: #f4f5f7;
-            border-style: solid;
-        }
+      .line {
+        width: 100%;
+        border-top: 1px;
+        border-color: #f4f5f7;
+        border-style: solid;
+      }
 
-        .friendId {
-            width: 50px;
-            height: 50px;
-            background-color: #4459AB;
-            float: left;
-            margin-top: 10px;
-            margin-left: 10px;
-            margin-right: 10px;
-            text-align: center;
-            line-height: 50px;
-            color: white;
-            border-radius: 25px;
-            margin-right: 100px;
-            /* 设置间距 */
-        }
+      .friendId {
+        width: 50px;
+        height: 50px;
+        background-color: #4459ab;
+        float: left;
+        margin-top: 10px;
+        margin-left: 10px;
+        margin-right: 10px;
+        text-align: center;
+        line-height: 50px;
+        color: white;
+        border-radius: 25px;
+        margin-right: 20px;
+        /* 设置间距 */
+      }
 
-        .status {
-            height: 20px;
-            width: 50px;
-            border-radius: 3px;
-            margin-right: 100px;
-            /* 设置间距 */
-        }
+      .status {
+        height: 20px;
+        width: 50px;
+        border-radius: 3px;
+        margin-right: 20px;
+        /* 设置间距 */
+      }
 
-        .friends_list {
-            width: 100%;
-            height: 800px;
-            margin: auto;
-            border-radius: 10px;
-            border: 0px solid #f4f5f7;
-            overflow: clip;
-        }
+      .friends_list {
+        width: 100%;
+        height: 800px;
+        margin: auto;
+        border-radius: 10px;
+        border: 0px solid #f4f5f7;
+        overflow: clip;
+      }
 
-        .button {
-            padding: 5px 10px;
-            /* 按钮的内边距 */
-            background-color: #4CAF50;
-            /* 背景颜色 */
-            border-radius: 5px;
-            color: white;
-            /* 文字颜色 */
-            border: none;
-            /* 边框样式 */
-            text-align: center;
-            /* 文字居中 */
-            text-decoration: none;
-            /* 链接文字的下划线样式 */
-            display: inline-block;
-            /* 行内块元素 */
-            font-size: 16px;
-            /* 字体大小 */
-            margin: 4px 2px;
-            /* 外边距 */
-            cursor: pointer;
-            /* 鼠标悬停时的样式 */
-        }
+      .functionButton {
+        padding: 5px 10px;
+        /* 按钮的内边距 */
+        background-color: #4caf50;
+        /* 背景颜色 */
+        border-radius: 5px;
+        color: white;
+        /* 文字颜色 */
+        border: none;
+        /* 边框样式 */
+        text-align: center;
+        /* 文字居中 */
+        text-decoration: none;
+        /* 链接文字的下划线样式 */
+        display: inline-block;
+        /* 行内块元素 */
+        font-size: 16px;
+        /* 字体大小 */
+        margin: 4px 2px;
+        /* 外边距 */
+        cursor: pointer;
+        /* 鼠标悬停时的样式 */
+      }
+      .chatButton {
+        padding: 5px 10px;
+        /* 按钮的内边距 */
+        background-color: #70d4f3;
+        /* 背景颜色 */
+        border-radius: 5px;
+        color: white;
+        /* 文字颜色 */
+        border: none;
+        /* 边框样式 */
+        text-align: center;
+        /* 文字居中 */
+        text-decoration: none;
+        /* 链接文字的下划线样式 */
+        display: inline-block;
+        /* 行内块元素 */
+        font-size: 16px;
+        /* 字体大小 */
+        margin: 4px 2px;
+        /* 外边距 */
+        cursor: pointer;
+        /* 鼠标悬停时的样式 */
+      }
     </style>
-</head>
+  </head>
 
-<body>
-
+  <body>
     <div class="friends_list">
-        <div class="top">
-            好友列表
+      <div class="top">好友列表</div>
+      <div class="line"></div>
+      <div class="middle">
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+          <button class="chatButton">开始聊天</button>
         </div>
-        <div class="line"></div>
-        <div class="middle">
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
 
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
-
-            <div class="friend">
-                <div class="friendId">User1</div>
-                <div class="status">在线</div>
-            </div>
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+          <button class="chatButton">开始聊天</button>
         </div>
-        <div class="line"></div>
-        <div class="foot">
-            <button id="addFriendBtn" class="button">添加好友</button>
-            <button id="removeFriendBtn" class="button">删除好友</button>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
         </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+
+        <div class="friend">
+          <div class="friendId">User1</div>
+          <div class="status">在线</div>
+        </div>
+      </div>
+      <div class="line"></div>
+      <div class="foot">
+        <button id="addFriendBtn" class="functionButton">添加好友</button>
+        <button id="removeFriendBtn" class="functionButton">删除好友</button>
+      </div>
     </div>
 
     <!-- 添加更多的好友信息 -->
+  </body>
+  <script>
+    const { ipcRenderer, remote } = require("electron");
 
-</body>
+    document.addEventListener("DOMContentLoaded", () => {
+      const chatBeginBtns = document.querySelectorAll(".chatButton")
+      //console.log(chatBeginBtns);
+      chatBeginBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          ipcRenderer.send("chatBegin");
+        });
+      });
 
+      ipcRenderer.send("getFriendList", )
+    });
+  </script>
 </html>
