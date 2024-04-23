@@ -91,7 +91,7 @@ class UserManager:
         self.cursor.execute('SELECT friendname FROM friendship WHERE username = ?', (username,))
         friends = self.cursor.fetchall()
         if not friends:
-            return []
+            return True, 'No friends found', []
         return True, 'Get friends list successfully', [friend[0] for friend in friends]
     
     def add_friend(self, username, friend_username):
