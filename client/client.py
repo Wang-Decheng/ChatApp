@@ -430,6 +430,7 @@ class ChatPage(QWidget):
     def display_message(self, message):
         message = message + '\n'
         self.message_display.append(message)
+        self.message_display.moveCursor(self.message_display.textCursor().End)  # 每次展示消息后将滚动条移动到底部
 
     def send_file(self):  # TODO
         username = CurrentUser.get_username()
@@ -468,16 +469,6 @@ class ChatPage(QWidget):
             threading.Thread(
                 target=self.__send_file_content, args=(username, receiver, file_path), daemon=True
             ).start()
-
-            # with open(file_path, "rb") as fp:
-            #     while True:
-            #         data = fp.read(2000)
-            #         if not data:
-            #             break
-            #         file_data_packet = mb.build_file_data(
-            #             username, receiver, os.path.basename(file_path), data
-            #         )
-            #         self.parent.connection.send_message(file_data_packet)
 
             self.display_message(f'File {os.path.basename(file_path)} prepared to send.')  # test
 
