@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const { MessageBuilder, Utils } = require("./utils");
 const net = require("net");
+const { log } = require("console");
 
 const serverHost = "127.0.0.1"; // 指定服务器的 IP 地址
 const serverPort = 9999; // 指定服务器的端口号
@@ -8,7 +9,19 @@ let timeStampBuffer = {};
 const requestType = {
     REGISTER: "register",
     LOGIN: "login",
+    GETFRIENDSLIST: "getFriendsList"
 }
+
+function sleep(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+
+
+async function wait(time) {
+    await sleep(time); 
+}
+
+
 
 const createLoginWindow = () => {
 
@@ -99,24 +112,45 @@ const login = (event, data) => {
     const loginRequest = MessageBuilder.build_login_request(username, password);
     const loginRequestJson = JSON.stringify(loginRequest);
     timeStampBuffer[loginRequest.timestamp] = requestType.LOGIN;
-    
+
+    wait(1000); //发送间隔一秒，以获得不同的时间戳
+
+    const friendsListRequest = MessageBuilder.build_get_friends_list_request(id);
+    const friendsListRequestJson = JSON.stringify(friendsListRequest);
+    timeStampBuffer[friendsListRequest.timestamp] = requestType.GETFRIENDSLIST;
+
+
     const client = new net.Socket();
 
     client.connect(serverPort, serverHost, () => {
         client.write(loginRequestJson);
+        client.write(friendsListRequestJson);
+        setInterval(() => {
+            client.write(friendsListRequestJson);
+        }, 10000);  //每隔10秒发送一次获取好友列表请求
     });
 
     client.on("data", (data) => {
         const jsonData = JSON.parse(data);
         console.log("Received JSON data:", jsonData);
-
         if (jsonData.timestamp in timeStampBuffer) {
             const responseType = timeStampBuffer[jsonData.timestamp];
+            console.log(responseType);
             if (responseType === requestType.LOGIN) {
-                getLoginResponse(jsonData);
+                if (jsonData.success === true) {
+                    const friendsWindow = createFriendsWindow();
+                } else {
+                    dialog.showMessageBox({
+                        type: "info",
+                        message: "服务器初次连接异常",
+                        buttons: ["确定"],
+                    });
+                }
+            } else if (responseType === requestType.GETFRIENDSLIST) {
+                console.log(11111)
             }
         }
-        
+
     });
 
 
@@ -160,9 +194,7 @@ const getLoginResponse = (jsonData) => {
     if (jsonData.success === true) {
 
         const friendsWindow = createFriendsWindow();
-        // const friendsListRequest = MessageBuilder.build_get_friends_list_request(id);
-        // const friendsListRequestJson = JSON.stringify(friendsListRequest);
-        // client.write(friendsListRequestJson);
+        return friendsWindow;
 
     } else {
         dialog.showMessageBox({
@@ -170,6 +202,7 @@ const getLoginResponse = (jsonData) => {
             message: "服务器连接异常",
             buttons: ["确定"],
         });
+        return null;
     }
 };
 
