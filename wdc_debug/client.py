@@ -22,7 +22,7 @@ class CurrentUser:
 
     @staticmethod
     def get_username():
-        return CurrentUser.username
+        return CurrentUser.username  
 
 class ChatConnection:
     def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
@@ -146,41 +146,15 @@ class ChatConnection:
         success = 'sccess' if response['success']  else 'failure'
         print(f"[Response]{success}: {response['message']}")
         return response['success']
-
-def debug_func(client):
-    connection = client.connection
-    args = sys.argv
-    if len(args) >= 1:
-        username = 'user' + args[1]
-    else: username = 'user'
-    password = '123'
-    register_msg = mb.build_register_request(username, password)
-    login_msg = mb.build_login_request(username, password)
-    connection.send_message(register_msg)
-    time.sleep(1)
-    connection.send_message(login_msg)
-    CurrentUser.set_username(username)
-    client.show_chat_page()
-    client.setWindowTitle(username)
-
-def debug_send_add_friend_request(connection):
-    username = 'test1'
-    password = '123'
-    friend_username = 'wdc'
-    message = mb.build_register_request(username, password)
-    connection.send_message(message)
-    time.sleep(1)
-    message = mb.build_register_request('wdc', password)
-    connection.send_message(message)
-    message = mb.build_login_request(username, password)
-    connection.send_message(message)
-    time.sleep(1)
-    CurrentUser.set_username(username)
-    message = mb.build_add_friend_request(username, friend_username)
-    connection.send_message(message)
-    time.sleep(1)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
+    
+    def send_file(self, sender, reciver, file_path):
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        message = mb.build_send_file_request(sender, reciver, file_name, file_size)
+        self.send_message(message)
+        time.sleep(0.3)
+        if file_transfer_client.send_file(file_path):
+            print(f"File {file_name} sent successfully.")
 
 def debug_login_as_test(connection, num):
     username = 'test' + str(num)
@@ -212,11 +186,37 @@ def debug_get_friends():
     response = connection.get_response(message['timestamp'])
     connection.show_response(response)
     print(response['data'])
-    # print(json.dumps(response))
+
+class FileTransferClient:
+
+    def __init__(self, host, port):
+        self.port = port
+        self.host = host
+
+    def send_file(self, file_path, chunk_size = 1024):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((self.host, self.port))
+        with open(file_path, 'rb') as f:
+            while True:
+                data = f.read(chunk_size)
+                if not data:
+                    break
+                client_socket.send(data)
+        client_socket.close()
+        return True
+
+def debug_send_file():
+    username = CurrentUser.get_username()
+    reciver = 'wdc'
+    file_path = './wdc_debug/large_file.bin'
+    # file_path = './wdc_debug/test.txt'
+    connection.send_file(username, reciver, file_path)
+
 
 if __name__ == '__main__':
     ip_address = '127.0.0.1'
     connection = ChatConnection(ip_address, 9999)
+    file_transfer_client = FileTransferClient(ip_address, 9998)
+    connection.start_connect()
     debug_login_as_test(connection, sys.argv[1])
-    debug_add_wdc(connection)
-    debug_get_friends()
+    debug_send_file()

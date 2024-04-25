@@ -1,6 +1,6 @@
 import socket
 import json
-from threading import Thread
+import threading
 import os
 from datetime import datetime
 import logging
@@ -9,16 +9,38 @@ import sys
 import user_manager as usermanager
 
 sys.path.append(".")
+
 from utils import MessageBuilder as mb
 
-class Server:
+class Manager:
+    _instance = None
+    _lock = threading.Lock()
 
-    def __init__(self, host, port, heartbeat_timeout=30):
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        ip_address = '127.0.0.1'
+        message_port = 9999
+        file_transfer_port = 9998
+        self.file_transfer_server = FileTransferServer(ip_address, file_transfer_port, self)
+        self.user_manager = usermanager.UserManager()
+        self.messagehandler = MessageHandler(manager_instance=self)
+        self.meaasge_server = MessageServer(ip_address, message_port, manager_instance=self)
+        self.meaasge_server.start()
+
+class MessageServer:
+    def __init__(self, host, port, heartbeat_timeout=30, manager_instance=None):
         self.host = host
         self.port = port
         self.timeout = heartbeat_timeout
-        self.user_manager = usermanager.UserManager()
-        self.messagehandler = MessageHandler(self.user_manager)
+        self.manager_instace = manager_instance
+        self.user_manager = manager_instance.user_manager
+        self.messagehandler = manager_instance.messagehandler
 
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(15)
@@ -39,7 +61,7 @@ class Server:
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
-                    Server.send_message(client_socket, mb.build_heartbeat('server'))
+                    MessageServer.send_message(client_socket, mb.build_heartbeat('server'))
                     if username is None:
                         username = message['who']
                         self.user_manager.set_online(username, client_socket)
@@ -89,14 +111,15 @@ class Server:
         while True:
             client_socket, client_address = server_socket.accept()
             print(f"Client connected from {client_address[0]}:{client_address[1]}")
-            client_handler = Thread(target=self.handle_client, args=(client_socket, client_address))
+            client_handler = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
             client_handler.start()
-
-
+        
 class MessageHandler:
 
-    def __init__(self, user_manager):
-        self.user_manager = user_manager
+    def __init__(self, manager_instance):
+        self.manager_instance = manager_instance
+        self.user_manager = self.manager_instance.user_manager
+        self.file_transfer_server = self.manager_instance.file_transfer_server
 
     def handle_message(self, message, client_socket):
         type = message['type']
@@ -120,12 +143,10 @@ class MessageHandler:
                     response = self.handle_get_friends(message)
                 case 'delete_friend':
                     response = self.handle_delete_friend(message)
-                case 'file_transfer_header':
-                    response = self.handle_file_transfer_header(message)
-                case 'file_data':
-                    response = self.handle_file_data(message)
+                case 'file_transfer':
+                    response = self.handle_file_transfer(message)
         if response:
-            Server.send_message(client_socket, response)
+            MessageServer.send_message(client_socket, response)
 
     def handle_login(self, message, client_socket):
         request_data = message['request_data']
@@ -169,7 +190,7 @@ class MessageHandler:
         receiver = request_data.get('receiver')
         if self.user_manager.is_online(receiver):
             receiver_client = self.user_manager.get_socket(receiver)
-            success = Server.send_message(receiver_client, request_data)
+            success = MessageServer.send_message(receiver_client, request_data)
             if success: response_text = 'send success'
         else:
             success, response_text = False, 'Receiver is not Online'
@@ -193,7 +214,6 @@ class MessageHandler:
             status = self.user_manager.is_online(user)
             user_status_dict[user] = status
         return mb.build_response(success, response_text, request_timestamp, user_status_dict)
-
     
     def handle_delete_friend(self, message):
         request_data = message['request_data']
@@ -203,49 +223,63 @@ class MessageHandler:
         success, response_text = self.user_manager.delete_friend(username, frient)
         return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_file_transfer_header(self, message):
+    def handle_file_transfer(self, message):
         request_data = message['request_data']
         request_timestamp = message['timestamp']
         receiver = request_data.get('receiver')
-        if self.user_manager.is_online(receiver):
-            receiver_client = self.user_manager.get_socket(receiver)
-            success = Server.send_message(receiver_client, request_data)
-            if success:
-                response_text = 'file transfer request sent'
-        else:
-            success, response_text = False, 'Receiver is not Online'
-        return mb.build_response(success, response_text, request_timestamp)
+        # 暂时先做服务器接受客户端的
+        # if not self.user_manager.is_online(receiver):
+        #     return mb.build_response(False, 'Receiver is not Online', request_timestamp)
+        file_name = request_data.get('file_name')
+        file_size = request_data.get('file_size')
+        chunk_size = request_data.get('chunk_size')
+        destination_folder = f'files/{receiver}'
+        if not os.path.exists(destination_folder):
+            os.makedirs(destination_folder)
+        file_path = os.path.join(destination_folder, file_name)
+        success, response = self.file_transfer_server.receive_file(file_path, chunk_size)
+        return mb.build_response(success, response, request_timestamp)
 
-    def handle_file_data(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
-        receiver = request_data.get('receiver')
-        receiver_client = self.user_manager.get_socket(receiver)
-        success = Server.send_message(receiver_client, request_data)
-        return None
+import socket
+import sys
+from datetime import datetime
+
+sys.path.append(".")
+from utils import MessageBuilder as mb
 
 
-    def handle_file_transfer_header(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
-        receiver = request_data.get('receiver')
-        if self.user_manager.is_online(receiver):
-            receiver_client = self.user_manager.get_socket(receiver)
-            success = Server.send_message(receiver_client, request_data)
-            if success:
-                response_text = 'file transfer request sent'
-        else:
-            success, response_text = False, 'Receiver is not Online'
-        return mb.build_response(success, response_text, request_timestamp)
+class FileTransferServer:
+    def __init__(self, host, port, manager_instance):
+        self.host = host
+        self.port = port
+        self.manager_instance = manager_instance
 
-    def handle_file_data(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
-        receiver = request_data.get('receiver')
-        receiver_client = self.user_manager.get_socket(receiver)
-        success = Server.send_message(receiver_client, request_data)
-        return None
-
+    def receive_file(self, file_path ,chunk_size):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind((self.host, self.port))
+        self.socket.listen(1)
+        client_socket, client_address = self.socket.accept()
+        print(f"Client connected from {client_address[0]}:{client_address[1]}")
+        with open(file_path, 'wb') as f:
+            while True:
+                data = client_socket.recv(chunk_size)
+                if not data:
+                    break
+                f.write(data)
+        client_socket.close()
+        self.socket.close()
+        return True, 'File received successfully'
+    
+    def send_file(self, file_path, chunk_size):
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.connect((self.host, self.port))
+        with open(file_path, 'rb') as f:
+            while True:
+                data = f.read(chunk_size)
+                if not data:
+                    break
+                self.client_socket.send(data)
+        self.client_socket.close()
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
@@ -265,11 +299,4 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
 
 if __name__ == '__main__':
     config_logging()
-    if os.environ.get('LOCAL') == 'True':
-        ip_address = '127.0.0.1'
-    else:
-        ip_address = '172.31.238.212'
-    print(ip_address)
-    user_manager = usermanager.UserManager()
-    server = Server(ip_address, 9999)
-    server.start()
+    Manager()
