@@ -33,6 +33,7 @@ class ChatConnection:
         self.timeout = timeout
         self.lock = threading.Lock()
         self.response_cache = None
+        self.file_transfer_client = FileTransferClient(host, 9998)
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -60,6 +61,17 @@ class ChatConnection:
                     print("Received heartbeat from server")
                 elif message_type == 'response':
                     self.response_cache = message
+                elif message_type == 'request':
+                    if message['action'] == 'file_transfer':
+                        requset_data = message['request_data']
+                        file_name = requset_data['file_name']
+                        file_size = requset_data['file_size']
+                        receiver = requset_data['receiver']
+                        destination_folder = f'cfiles/{receiver}'
+                        if not os.path.exists(destination_folder):
+                            os.makedirs(destination_folder)
+                        file_path = os.path.join(destination_folder, file_name)
+                        self.file_transfer_client.receive_file(file_path, file_size)
                 else:
                     self.handle_message(message)
             except socket.timeout:
@@ -71,6 +83,10 @@ class ChatConnection:
                 print("Error decoding JSON message")
             except KeyError as e:
                 print(f"Missing key in message: {e}")
+            except Exception as e:
+                print(f"Error handling message: {str(e)}")
+                self.disconnect()
+                break
 
     def handle_message(self, message):
         if message['type'] == 'personal_message':
@@ -92,6 +108,8 @@ class ChatConnection:
             except Exception as e:
                 print(str(e))
                 self.disconnect()
+    
+    
     
     def send_heartbeat(self):
         while self.server_socket is not None:
@@ -206,10 +224,18 @@ class FileTransferClient:
     def receive_file(self, file_path, chunk_size = 1024):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((self.host, self.port))
+        with open(file_path, 'wb') as f:
+            while True:
+                data = client_socket.recv(chunk_size)
+                if not data:
+                    break
+                f.write(data)
+        client_socket.close()
+        print(f"File {file_path} received successfully.")
+        return True
 
-def debug_send_file():
+def debug_send_file(reciver):
     username = CurrentUser.get_username()
-    reciver = 'wdc'
     file_path = './wdc_debug/large_file.bin'
     # file_path = './wdc_debug/test.txt'
     connection.send_file(username, reciver, file_path)
@@ -220,7 +246,8 @@ if __name__ == '__main__':
     connection = ChatConnection(ip_address, 9999)
     file_transfer_client = FileTransferClient(ip_address, 9998)
     connection.start_connect()
-    debug_login_as(connection, 'test')
-    debug_add_friend(connection, 'test1')
-    debug_get_friends()
-    # debug_send_file()
+    username = 'user' + sys.argv[1]
+    debug_login_as(connection, username)
+    time.sleep(1)
+    if sys.argv[1] == '1':
+        debug_send_file('user2')

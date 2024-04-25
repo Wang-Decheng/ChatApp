@@ -31,8 +31,8 @@ class Manager:
         self.file_transfer_server = FileTransferServer(ip_address, file_transfer_port, self)
         self.user_manager = usermanager.UserManager()
         self.messagehandler = MessageHandler(manager_instance=self)
-        self.meaasge_server = MessageServer(ip_address, message_port, manager_instance=self)
-        self.meaasge_server.start()
+        self.message_server = MessageServer(ip_address, message_port, manager_instance=self)
+        self.message_server.start()
 
 class MessageServer:
     def __init__(self, host, port, heartbeat_timeout=30, manager_instance=None):
@@ -228,9 +228,8 @@ class MessageHandler:
         request_data = message['request_data']
         request_timestamp = message['timestamp']
         receiver = request_data.get('receiver')
-        # 暂时先做服务器接受客户端的
-        # if not self.user_manager.is_online(receiver):
-        #     return mb.build_response(False, 'Receiver is not Online', request_timestamp)
+        if not self.user_manager.is_online(receiver):
+            return mb.build_response(False, 'Receiver is not Online', request_timestamp)
         file_name = request_data.get('file_name')
         file_size = request_data.get('file_size')
         chunk_size = request_data.get('chunk_size')
@@ -243,7 +242,7 @@ class MessageHandler:
             return mb.build_response(False, 'File transfer failed', request_timestamp)
         # 发送文件
         receiver_client = self.user_manager.get_socket(receiver)
-        message = mb.build_send_file_request(file_name, file_size, chunk_size)
+        message = mb.build_send_file_request(request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size)
         self.manager_instance.message_server.send_message(receiver_client, message)
         time.sleep(0.3)
         self.file_transfer_server.send_file(file_path, chunk_size)
@@ -269,6 +268,7 @@ class FileTransferServer:
                 f.write(data)
         client_socket.close()
         self.socket.close()
+        logging.info(f"File {file_path} received")
         return True
     
     def send_file(self, file_path, chunk_size = 1024):
@@ -284,6 +284,7 @@ class FileTransferServer:
                     break
                 client_socket.send(data)
         client_socket.close()
+        logging.info(f"File {file_path} sent")
         return True
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
