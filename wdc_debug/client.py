@@ -156,8 +156,7 @@ class ChatConnection:
         if file_transfer_client.send_file(file_path):
             print(f"File {file_name} sent successfully.")
 
-def debug_login_as_test(connection, num):
-    username = 'test' + str(num)
+def debug_login_as(connection, username):
     password = '123'
     message = mb.build_register_request(username, password)
     connection.send_message(message)
@@ -171,9 +170,8 @@ def debug_login_as_test(connection, num):
     connection.show_response(response)
     CurrentUser.set_username(username)
 
-def debug_add_wdc(connection):
+def debug_add_friend(connection, friend):
     username = CurrentUser.get_username()
-    friend = 'wdc'
     message = mb.build_add_friend_request(username, friend)
     connection.send_message(message)
     response = connection.get_response(message['timestamp'])
@@ -204,6 +202,10 @@ class FileTransferClient:
                 client_socket.send(data)
         client_socket.close()
         return True
+    
+    def receive_file(self, file_path, chunk_size = 1024):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((self.host, self.port))
 
 def debug_send_file():
     username = CurrentUser.get_username()
@@ -218,5 +220,7 @@ if __name__ == '__main__':
     connection = ChatConnection(ip_address, 9999)
     file_transfer_client = FileTransferClient(ip_address, 9998)
     connection.start_connect()
-    debug_login_as_test(connection, sys.argv[1])
-    debug_send_file()
+    debug_login_as(connection, 'test')
+    debug_add_friend(connection, 'test1')
+    debug_get_friends()
+    # debug_send_file()

@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import logging
 import sys
+import time
 
 import user_manager as usermanager
 
@@ -237,15 +238,15 @@ class MessageHandler:
         if not os.path.exists(destination_folder):
             os.makedirs(destination_folder)
         file_path = os.path.join(destination_folder, file_name)
-        success, response = self.file_transfer_server.receive_file(file_path, chunk_size)
-        return mb.build_response(success, response, request_timestamp)
-
-import socket
-import sys
-from datetime import datetime
-
-sys.path.append(".")
-from utils import MessageBuilder as mb
+        success = self.file_transfer_server.receive_file(file_path, chunk_size)
+        if not success:
+            return mb.build_response(False, 'File transfer failed', request_timestamp)
+        # 发送文件
+        receiver_client = self.user_manager.get_socket(receiver)
+        message = mb.build_send_file_request(file_name, file_size, chunk_size)
+        self.manager_instance.message_server.send_message(receiver_client, message)
+        time.sleep(0.3)
+        self.file_transfer_server.send_file(file_path, chunk_size)
 
 
 class FileTransferServer:
@@ -268,18 +269,22 @@ class FileTransferServer:
                 f.write(data)
         client_socket.close()
         self.socket.close()
-        return True, 'File received successfully'
+        return True
     
-    def send_file(self, file_path, chunk_size):
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((self.host, self.port))
+    def send_file(self, file_path, chunk_size = 1024):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind((self.host, self.port))
+        self.socket.listen(1)
+        client_socket, client_address = self.socket.accept()
+        print(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'rb') as f:
             while True:
                 data = f.read(chunk_size)
                 if not data:
                     break
-                self.client_socket.send(data)
-        self.client_socket.close()
+                client_socket.send(data)
+        client_socket.close()
+        return True
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
