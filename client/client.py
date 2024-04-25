@@ -144,18 +144,18 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit=1):
+    def get_response(self, request_timestamp, timelimit=1):  # FIXME
         start_time = time.time()
         while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
             if (time.time() - start_time > timelimit): break
 
-        if self.response_cache is None:
-            return False, 'No Response'
+        # if self.response_cache is None:
+        #     return False
 
         if self.response_cache['timestamp'] == request_timestamp:
             return self.response_cache
         else:
-            return False, 'No Response'
+            return False  # MARK 更改了函数的返回值，从tuple改成bool
 
 
 class ChatClient(QMainWindow):
@@ -497,8 +497,57 @@ class ChatPage(QWidget):
 
         return chat
 
-    def __update_friend_status(self):  # TODO 新开线程更新好友列表
-        pass
+    def __update_friend_status(self):
+        # XXX 由于使用多线程时无法运行，所以在调用display_message时更新好友列表
+
+        # time.sleep(2)
+        # while True:
+        update_friend_list_request = mb.build_get_friends_request(CurrentUser.get_username())
+        self.parent.connection.send_message(update_friend_list_request)
+        response = self.parent.get_response(update_friend_list_request['timestamp'])
+        # if response is False:
+        #     # continue
+        #     return
+
+        if isinstance(response, tuple):
+            return
+
+        if response['success']:
+
+            friend_list = response['data']
+            if len(friend_list) == 0:
+                # continue
+                return
+
+            for index in range(self.friend_list.count()):  # 遍历好友列表，删除好友
+                item = self.friend_list.item(index)
+                username = item.text()
+
+                status = friend_list.get(username)
+                if status == None:
+                    # 好友已经被删除
+                    if username != 'None':
+                        self.handle_delete_friend(username)
+
+                else:
+                    chat = self.chat_pages.findChild(QWidget, username)
+                    chat.setProperty('status', status)
+                    status_label = chat.findChild(QLabel, 'StatusLabel')
+                    status_label.setText(f'{username}状态:{status}')
+
+            for key, value in friend_list.items():
+                if self.friend_list.findItems(key, Qt.MatchExactly):  # 好友列表存在该好友
+                    continue
+
+                chat = self.__chatpage_factory(key)
+                chat.setProperty('status', value)
+                label = chat.findChild(QLabel, 'StatusLabel')
+                label.setText(f'{key}状态:{value}')
+
+                self.friend_list.addItem(key)
+                self.chat_pages.addWidget(chat)
+
+            # time.sleep(10)
 
     def add_friend(self, friend_name):  # TODO 主动添加好友
         user_name, status = QInputDialog.getText(self, "Add Friend", "Enter the username of the friend:")
@@ -580,7 +629,12 @@ class ChatPage(QWidget):
 
         displayer = chat.findChild(QTextEdit, 'MessageDisplayer')
         displayer.append(message + '\n')
+        name = CurrentUser.get_username()
+        if name != None:
+            displayer.append(name + '\n')
         displayer.moveCursor(displayer.textCursor().End)
+
+        self.__update_friend_status()
 
         # 之后可以增加消息弹窗提示
 
@@ -629,13 +683,12 @@ def debug_func(client):
     client.show_chat_page()
     client.setWindowTitle(username)
 
-    num = 0
-    if args[1] == '1':
-        num = 2
-    else:
-        num = 1
-
-    client.chat_page.handle_add_friend('user' + str(num))
+    # num = 0 # TEST
+    # if args[1] == '1':
+    #     num = 2
+    # else:
+    #     num = 1
+    # client.chat_page.handle_add_friend('user' + str(num))
 
 
 if __name__ == '__main__':
