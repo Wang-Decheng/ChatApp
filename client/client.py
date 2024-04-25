@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog
 from PyQt5.QtCore import Qt, pyqtSignal
 import socket
 import json
@@ -46,6 +46,8 @@ class ChatConnection:
         self.response_cache = None
         self.parent = None
 
+        self.friend_status_cache = None
+
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -91,7 +93,7 @@ class ChatConnection:
             except KeyError as e:
                 logging.error(f"Missing key in message: {e}")
 
-    def handle_message(self, message):
+    def handle_message(self, message):  # TODO 收到消息后在此进行处理
         if message['type'] == 'personal_message':
             sender = message['sender']
             content = message['content']
@@ -99,7 +101,7 @@ class ChatConnection:
             timestamp_datetime = datetime.fromtimestamp(timestamp)
             formatted_timestamp = timestamp_datetime.strftime("%m-%d %H:%M")
             string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
-            self.parent.chat_page.display_message(string)
+            self.parent.chat_page.display_message(string, sender)
 
         if message['type'] == 'file_tranfer_header':
             file_path = os.path.dirname(__file__) + '\\' + message['file_name']
@@ -120,7 +122,7 @@ class ChatConnection:
     def send_message(self, message):
         if not self.server_socket:
             self.start_connect()
-        with global_lock:
+        with self.lock:
             try:
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
@@ -142,10 +144,14 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit = 1):
+    def get_response(self, request_timestamp, timelimit=1):
         start_time = time.time()
         while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
             if (time.time() - start_time > timelimit): break
+
+        if self.response_cache is None:
+            return False, 'No Response'
+
         if self.response_cache['timestamp'] == request_timestamp:
             return self.response_cache
         else:
@@ -330,6 +336,7 @@ class LoginPage(QWidget):
             CurrentUser.set_username(username)
             self.parent.show_chat_page()
 
+
 class DeletePage(QWidget):
 
     def __init__(self, parent=None):
@@ -381,120 +388,207 @@ class ChatPage(QWidget):
         super().__init__(parent)
         self.parent = parent
 
-        self.chat_label = QLabel("Chat Page")
-        self.message_display = QTextEdit()
-        self.message_display.setReadOnly(True)
-        self.send_to_label = QLabel("Send to:")
-        self.receiver_entry = QLineEdit()
-        self.message_entry = QTextEdit()
-        self.back_button = QPushButton("Back")
-        self.send_message_button = QPushButton("Send Message")
-        self.send_file_button = QPushButton("Send File")
+        self.current_friend = None
+        self.chat_pages = QStackedWidget()
+        self.friend_list = QListWidget()
+        self.init_UI()
 
-        self.back_button.clicked.connect(parent.show_main_page)
-        self.send_message_button.clicked.connect(self.send_message)
-        self.send_file_button.clicked.connect(self.send_file)
+        # threading.Thread(target=self.__update_friend_status, daemon=True).start()
+
+    def init_UI(self):
+        layout = QHBoxLayout()
+
+        friend_list = ['None']
+        self.friend_list.addItems(friend_list)  # TEST
+        self.friend_list.setFixedWidth(150)
+        self.friend_list.itemClicked.connect(self.__change_selected_friend)
+        layout.addWidget(self.friend_list)
+
+        for friend in friend_list:
+            chat = self.__chatpage_factory(friend)
+            if chat is not None:
+                self.chat_pages.addWidget(chat)
+        layout.addWidget(self.chat_pages)
+
+        self.setLayout(layout)
+        self.setWindowTitle("Chat Page")
+
+        pass
+
+    def __change_selected_friend(self, item):
+        '''
+        更改当前好友选择
+        '''
+        friend_name = item.text()
+        self.current_friend = friend_name
+        self.chat_pages.setCurrentWidget(self.chat_pages.findChild(QWidget, friend_name))
+
+    def __chatpage_factory(self, friend_name: str):
+        '''
+        根据名字生成聊天界面
+        '''
+        chat = QWidget()  # 当前好友聊天界面
+        chat.setObjectName(friend_name)
+
+        min_width = 400
+        min_height = 180
 
         layout = QVBoxLayout()
-        layout.addWidget(self.chat_label, alignment=Qt.AlignCenter)
-        layout.addWidget(self.message_display)
-        send_to_layout = QHBoxLayout()
-        send_to_layout.addWidget(self.send_to_label)
-        send_to_layout.addWidget(self.receiver_entry)
-        layout.addLayout(send_to_layout)
-        layout.addWidget(self.message_entry)
-        layout.addWidget(self.send_message_button)
-        layout.addWidget(self.send_file_button)
-        layout.addWidget(self.back_button)
-        self.setLayout(layout)
+
+        # 当前好友状态显示
+        chat.setProperty('status', 'offline')
+        status_label = QLabel(f'{friend_name}状态:' + chat.property('status'))
+        status_label.setObjectName('StatusLabel')
+        status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(status_label)
+
+        # 聊天消息显示
+        message_displayer = QTextEdit()
+        message_displayer.setReadOnly(True)
+        message_displayer.setObjectName('MessageDisplayer')
+        message_displayer.setMinimumWidth(min_width)
+        message_displayer.setMinimumHeight(min_height)
+        layout.addWidget(message_displayer)
+
+        # 发送消息编辑框
+        message_editor = QTextEdit()
+        message_editor.setObjectName('MessageEditor')
+        message_editor.setMinimumWidth(min_width)
+        message_editor.setMinimumHeight(min_height)
+        layout.addWidget(message_editor)
+
+        button_layout = QHBoxLayout()
+        # 发送消息按钮
+        send_message_button = QPushButton("Send Message")
+        send_message_button.setObjectName('SendMessageButton')
+        send_message_button.clicked.connect(self.send_message)
+        # send_message_button.setFixedSize(200, 30)
+        button_layout.addWidget(send_message_button)
+        # 发送文件按钮
+        send_file_button = QPushButton("Send File")
+        send_file_button.setObjectName('SendFileButton')
+        send_file_button.clicked.connect(self.send_file)
+        # send_file_button.setFixedSize(200, 30)
+        button_layout.addWidget(send_file_button)
+
+        layout.addLayout(button_layout)
+
+        del button_layout
+        button_layout = QHBoxLayout()
+        # 添加好友按钮
+        add_friend_button = QPushButton("Add Friend")
+        add_friend_button.setObjectName('AddFriendButton')
+        add_friend_button.clicked.connect(self.add_friend)
+        button_layout.addWidget(add_friend_button)
+        # 删除好友按钮
+        delete_friend_button = QPushButton("Delete Friend")
+        delete_friend_button.setObjectName('DeleteFriendButton')
+        delete_friend_button.clicked.connect(self.remove_friend)
+        button_layout.addWidget(delete_friend_button)
+
+        layout.addLayout(button_layout)
+        # 返回主界面按钮
+        back_button = QPushButton("Back")
+        back_button.setObjectName('BackButton')
+        back_button.clicked.connect(self.parent.show_main_page)
+        layout.addWidget(back_button)
+
+        chat.setLayout(layout)
+
+        return chat
+
+    def __update_friend_status(self):  # TODO 新开线程更新好友列表
+        pass
+
+    def add_friend(self, friend_name):  # TODO 主动添加好友
+        user_name, status = QInputDialog.getText(self, "Add Friend", "Enter the username of the friend:")
+        if status == False:
+            return
+
+        add_friend_request = mb.build_add_friend_request(CurrentUser.get_username(), user_name)
+        self.parent.connection.send_message(add_friend_request)
+
+        timestamp = add_friend_request['timestamp']
+        response = self.parent.get_response(timestamp)  # 单向添加好友
+        if not response['success']:
+            return
+
+        chat = self.__chatpage_factory(user_name)
+        if chat is None:
+            QMessageBox.critical(self, "Error", "Failed to add friend.")
+        self.friend_list.addItem(user_name)
+        self.chat_pages.addWidget(chat)
+
+        # 单向添加，
+        pass  # 可以在聊天界面中删除好友
+
+    def remove_friend(self, friend_name):  # TODO 主动删除好友
+        pass  # 删除当前好友
+
+    def handle_add_friend(self, user_name):  # TODO 处理对方添加你为好友的情况
+        for i in range(self.friend_list.count()):  # 遍历好友列表
+            if self.friend_list.item(i).text() == user_name:
+                return
+
+        chat = self.__chatpage_factory(user_name)
+        self.friend_list.addItem(user_name)
+        self.chat_pages.addWidget(chat)
+
+    def handle_delete_friend(self, user_name):  # TODO 处理对方删除你的情况
+
+        index = self.chat_pages.findChild(QWidget, user_name)
+        self.chat_pages.removeWidget(index)
+        index.deleteLater()
+
+        index = self.friend_list.findItems(user_name, Qt.MatchExactly)
+        for item in index:
+            self.friend_list.takeItem(self.friend_list.row(item))
+
+        if user_name == self.current_friend:
+            page = self.friend_list.findItems("None", Qt.MatchExactly)
+            self.__change_selected_friend(page[0])
 
     def send_message(self):
-        username = CurrentUser.get_username()
-        reciver = self.receiver_entry.text()
-        if username != reciver:
-            content = self.message_entry.toPlainText()
-            message = mb.build_send_personal_message_request(username, reciver, content)
-            timestamp = message['timestamp']
-            self.parent.connection.send_message(message)
-            response = self.parent.get_response(timestamp)
-        else:
-            response = {'success': False, 'message': 'Can not send to yourself'}
+        if self.current_friend is None:
+            QMessageBox.critical(self, "Error", "Please select a friend to send message.")
+            return
 
-        if response['success']:
-            receiver = message['request_data']['receiver']
-            content = message['request_data']['content']
-            formatted_timestamp = datetime.fromtimestamp(message['timestamp']).strftime("%m-%d %H:%M")
-            self.display_message(f"[{formatted_timestamp}]You->{receiver}:\n{content}")
-        self.parent.show_response(response)
+        editor = self.chat_pages.currentWidget().findChild(QTextEdit, 'MessageEditor')
+        displayer = self.chat_pages.currentWidget().findChild(QTextEdit, 'MessageDisplayer')
+        friend_name = self.current_friend
 
-    def display_message(self, message):
-        message = message + '\n'
-        self.message_display.append(message)
+        message = editor.toPlainText()
+        if message == '':
+            return
 
-    def send_file(self):  # TODO
-        username = CurrentUser.get_username()
-        receiver = self.receiver_entry.text()
-        response = None
+        if self.current_friend == 'None':
+            self.display_message(message, friend_name)
+            return
 
-        while True:
-            if not receiver:  # 若没有输入接收者，则返回
-                response = {'success': False, 'message': 'Please input the receiver username'}
-                break
-            if username == receiver:  # 若输入的接收者是自己，则返回
-                response = {'success': False, 'message': 'Can not send file to yourself'}
-                break
+        message_packet = mb.build_send_personal_message_request(
+            CurrentUser.get_username(), friend_name, message
+        )
+        self.parent.connection.send_message(message_packet)
+        self.display_message(message, friend_name)
 
-            options = QFileDialog.Options()
-            file_path, _ = QFileDialog.getOpenFileName(self, "文件选择", "", "All Files (*)", options=options)
-            if not file_path:  # 若没有选择文件，则返回
-                response = {'success': False, 'message': 'No file selected'}
-                break
+        # editor.clear() # 清空编辑框 # TEST
 
-            if not os.path.isfile(file_path):
-                response = {'success': False, 'message': 'It\'s not File'}
-                break
+    def display_message(self, message, target=None):
+        chat = self.chat_pages.findChild(QWidget, target)
+        if chat is None:  # MARK 如果不是好友，不做处理
+            return
 
-            request = mb.build_file_transfer_header(
-                username, receiver, os.path.basename(file_path),
-                os.stat(file_path).st_size, None
-            )
-            timestamp = request['timestamp']
-            self.parent.connection.send_message(request)
-            response = self.parent.get_response(timestamp)
+        displayer = chat.findChild(QTextEdit, 'MessageDisplayer')
+        displayer.append(message + '\n')
+        displayer.moveCursor(displayer.textCursor().End)
 
-            if not response['success']:
-                break
+        # 之后可以增加消息弹窗提示
 
-            threading.Thread(
-                target=self.__send_file_content, args=(username, receiver, file_path), daemon=True
-            ).start()
+    def send_file(self):  # TODO 使用QThread发送、接收文件，完毕后弹窗
+        pass
 
-            # with open(file_path, "rb") as fp:
-            #     while True:
-            #         data = fp.read(2000)
-            #         if not data:
-            #             break
-            #         file_data_packet = mb.build_file_data(
-            #             username, receiver, os.path.basename(file_path), data
-            #         )
-            #         self.parent.connection.send_message(file_data_packet)
-
-            self.display_message(f'File {os.path.basename(file_path)} prepared to send.')  # test
-
-            break
-
-        # self.parent.show_response(response)
-
-    def __send_file_content(self, username, receiver, file_path):
-        with open(file_path, 'rb') as fp:
-            while True:
-                data = fp.read(4000)
-                if not data:
-                    break
-                file_data_packet = mb.build_file_data(username, receiver, os.path.basename(file_path), data)
-                self.parent.connection.send_message(file_data_packet)
-
-        self.display_message(f"File {os.path.basename(file_path)} sent successfully.")
+    def receive_file(self):  # TODO 接收文件
+        pass
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
@@ -534,6 +628,14 @@ def debug_func(client):
     CurrentUser.set_username(username)
     client.show_chat_page()
     client.setWindowTitle(username)
+
+    num = 0
+    if args[1] == '1':
+        num = 2
+    else:
+        num = 1
+
+    client.chat_page.handle_add_friend('user' + str(num))
 
 
 if __name__ == '__main__':
