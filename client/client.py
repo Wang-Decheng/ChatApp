@@ -704,3 +704,6 @@ if __name__ == '__main__':
     if os.environ.get('DEBUG') == 'True':
         debug_func(client)
     sys.exit(app.exec_())
+
+# TODO
+# 可以在页面上增加一个按钮，用来刷新好友状态
