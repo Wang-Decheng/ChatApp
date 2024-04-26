@@ -22,7 +22,7 @@ class CurrentUser:
 
     @staticmethod
     def get_username():
-        return CurrentUser.username
+        return CurrentUser.username  
 
 class ChatConnection:
     def __init__(self, host, port, heartbeat_interval = 10, timeout = 30):
@@ -33,6 +33,7 @@ class ChatConnection:
         self.timeout = timeout
         self.lock = threading.Lock()
         self.response_cache = None
+        self.file_transfer_client = FileTransferClient(host, 9998)
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.connect((self.host, self.port))
@@ -60,6 +61,17 @@ class ChatConnection:
                     print("Received heartbeat from server")
                 elif message_type == 'response':
                     self.response_cache = message
+                elif message_type == 'request':
+                    if message['action'] == 'file_transfer':
+                        requset_data = message['request_data']
+                        file_name = requset_data['file_name']
+                        file_size = requset_data['file_size']
+                        receiver = requset_data['receiver']
+                        destination_folder = f'cfiles/{receiver}'
+                        if not os.path.exists(destination_folder):
+                            os.makedirs(destination_folder)
+                        file_path = os.path.join(destination_folder, file_name)
+                        self.file_transfer_client.receive_file(file_path, file_size)
                 else:
                     self.handle_message(message)
             except socket.timeout:
@@ -71,6 +83,10 @@ class ChatConnection:
                 print("Error decoding JSON message")
             except KeyError as e:
                 print(f"Missing key in message: {e}")
+            except Exception as e:
+                print(f"Error handling message: {str(e)}")
+                self.disconnect()
+                break
 
     def handle_message(self, message):
         if message['type'] == 'personal_message':
@@ -92,6 +108,8 @@ class ChatConnection:
             except Exception as e:
                 print(str(e))
                 self.disconnect()
+    
+    
     
     def send_heartbeat(self):
         while self.server_socket is not None:
@@ -146,44 +164,17 @@ class ChatConnection:
         success = 'sccess' if response['success']  else 'failure'
         print(f"[Response]{success}: {response['message']}")
         return response['success']
+    
+    def send_file(self, sender, reciver, file_path):
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        message = mb.build_send_file_request(sender, reciver, file_name, file_size)
+        self.send_message(message)
+        time.sleep(0.3)
+        if file_transfer_client.send_file(file_path):
+            print(f"File {file_name} sent successfully.")
 
-def debug_func(client):
-    connection = client.connection
-    args = sys.argv
-    if len(args) >= 1:
-        username = 'user' + args[1]
-    else: username = 'user'
-    password = '123'
-    register_msg = mb.build_register_request(username, password)
-    login_msg = mb.build_login_request(username, password)
-    connection.send_message(register_msg)
-    time.sleep(1)
-    connection.send_message(login_msg)
-    CurrentUser.set_username(username)
-    client.show_chat_page()
-    client.setWindowTitle(username)
-
-def debug_send_add_friend_request(connection):
-    username = 'test1'
-    password = '123'
-    friend_username = 'wdc'
-    message = mb.build_register_request(username, password)
-    connection.send_message(message)
-    time.sleep(1)
-    message = mb.build_register_request('wdc', password)
-    connection.send_message(message)
-    message = mb.build_login_request(username, password)
-    connection.send_message(message)
-    time.sleep(1)
-    CurrentUser.set_username(username)
-    message = mb.build_add_friend_request(username, friend_username)
-    connection.send_message(message)
-    time.sleep(1)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
-
-def debug_login_as_test(connection, num):
-    username = 'test' + str(num)
+def debug_login_as(connection, username):
     password = '123'
     message = mb.build_register_request(username, password)
     connection.send_message(message)
@@ -197,9 +188,8 @@ def debug_login_as_test(connection, num):
     connection.show_response(response)
     CurrentUser.set_username(username)
 
-def debug_add_wdc(connection):
+def debug_add_friend(connection, friend):
     username = CurrentUser.get_username()
-    friend = 'wdc'
     message = mb.build_add_friend_request(username, friend)
     connection.send_message(message)
     response = connection.get_response(message['timestamp'])
@@ -212,11 +202,52 @@ def debug_get_friends():
     response = connection.get_response(message['timestamp'])
     connection.show_response(response)
     print(response['data'])
-    # print(json.dumps(response))
+
+class FileTransferClient:
+
+    def __init__(self, host, port):
+        self.port = port
+        self.host = host
+
+    def send_file(self, file_path, chunk_size = 1024):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((self.host, self.port))
+        with open(file_path, 'rb') as f:
+            while True:
+                data = f.read(chunk_size)
+                if not data:
+                    break
+                client_socket.send(data)
+        client_socket.close()
+        return True
+    
+    def receive_file(self, file_path, chunk_size = 1024):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((self.host, self.port))
+        with open(file_path, 'wb') as f:
+            while True:
+                data = client_socket.recv(chunk_size)
+                if not data:
+                    break
+                f.write(data)
+        client_socket.close()
+        print(f"File {file_path} received successfully.")
+        return True
+
+def debug_send_file(reciver):
+    username = CurrentUser.get_username()
+    file_path = './wdc_debug/large_file.bin'
+    # file_path = './wdc_debug/test.txt'
+    connection.send_file(username, reciver, file_path)
+
 
 if __name__ == '__main__':
     ip_address = '127.0.0.1'
     connection = ChatConnection(ip_address, 9999)
-    debug_login_as_test(connection, sys.argv[1])
-    debug_add_wdc(connection)
-    debug_get_friends()
+    file_transfer_client = FileTransferClient(ip_address, 9998)
+    connection.start_connect()
+    username = 'user' + sys.argv[1]
+    debug_login_as(connection, username)
+    time.sleep(1)
+    if sys.argv[1] == '1':
+        debug_send_file('user2')
