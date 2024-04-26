@@ -77,11 +77,11 @@ class MessageBuilder:
     # region 生成请求消息
     # 根据请求内容生成请求
     @staticmethod
-    def __build_request(action, request_data):
+    def build_request(action, request_data, timestamp=time.time()):
         message_data = {
             'type': 'request',
             'action': action,
-            'timestamp': time.time(),
+            'timestamp': timestamp,
             'request_data': request_data
         }
         return message_data
@@ -90,36 +90,36 @@ class MessageBuilder:
     @staticmethod
     def build_login_request(username, password):
         request_data = {'username': username, 'password': password}
-        return MessageBuilder.__build_request('login', request_data)
+        return MessageBuilder.build_request('login', request_data)
     
     def build_logout_request(username):
         request_data = {'username': username}
-        return MessageBuilder.__build_request('logout', request_data)
+        return MessageBuilder.build_request('logout', request_data)
 
     @staticmethod
     def build_register_request(username, password):
         request_data = {'username': username, 'password': password}
-        return MessageBuilder.__build_request('register', request_data)
+        return MessageBuilder.build_request('register', request_data)
 
     @staticmethod
     def build_delete_account_request(username, password):
         request_data = {'username': username, 'password': password}
-        return MessageBuilder.__build_request('delete_account', request_data)
+        return MessageBuilder.build_request('delete_account', request_data)
     
     @staticmethod
     def build_add_friend_request(username, friend):
         request_data = {'username': username,'friend': friend}
-        return MessageBuilder.__build_request('add_friend', request_data)
+        return MessageBuilder.build_request('add_friend', request_data)
     
     @staticmethod
     def build_get_friends_request(username):
         request_data = {'username': username}
-        return MessageBuilder.__build_request('get_friends', request_data)
+        return MessageBuilder.build_request('get_friends', request_data)
     
     @staticmethod
     def build_remove_friend_request(username, friend):
         request_data = {'username': username,'friend': friend}
-        return MessageBuilder.__build_request('remove_friend', request_data)
+        return MessageBuilder.build_request('remove_friend', request_data)
 
     @staticmethod
     def build_send_personal_message_request(sender, receiver, content):
@@ -130,7 +130,7 @@ class MessageBuilder:
             'content': content,
             'timestamp': time.time()
         }
-        return MessageBuilder.__build_request('send_personal_message', message_data)
+        return MessageBuilder.build_request('send_personal_message', message_data)
 
     @staticmethod
     def build_send_group_message_request(sender, group, content):
@@ -141,7 +141,7 @@ class MessageBuilder:
             'content': content,
             'timestamp': time.time()
         }
-        return MessageBuilder.__build_request('send_group_messager', message_data)
+        return MessageBuilder.build_request('send_group_messager', message_data)
 
     def build_send_file_request(sender, receiver, file_name, file_size, timestamp = time.time(), chunk_size = 1024):
         request_data = {
@@ -152,6 +152,6 @@ class MessageBuilder:
             'chunk_size': chunk_size,
             'timestamp': timestamp
         }
-        return MessageBuilder.__build_request('file_transfer', request_data)
+        return MessageBuilder.build_request('file_transfer', request_data)
     
     # endregion

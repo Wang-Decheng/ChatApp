@@ -40,6 +40,7 @@ class MessageServer:
         self.manager_instace = manager_instance
         self.user_manager = manager_instance.user_manager
         self.messagehandler = manager_instance.messagehandler
+        
 
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(self.socket_timeout)
@@ -108,6 +109,7 @@ class MessageHandler:
         self.manager_instance = manager_instance
         self.user_manager = self.manager_instance.user_manager
         self.file_transfer_server = self.manager_instance.file_transfer_server
+        self.message_queues = {}
         config = Config()
         self.file_transfer_interval =  config.file_transfer_interval
 
@@ -118,85 +120,93 @@ class MessageHandler:
             action = message['action']
             match action:
                 case 'login':
-                    response = self.handle_login(message, client_socket)
+                    response = self.handle_login(message['request_data'], message['timestamp'], client_socket)
                 case 'logout':
-                    response = self.handle_logout(message)
+                    response = self.handle_logout(message['request_data'], message['timestamp'])
                 case 'register':
-                    response = self.handle_register(message)
+                    response = self.handle_register(message['request_data'], message['timestamp'])
                 case 'delete_account':
-                    response = self.handle_delete_account(message)
+                    response = self.handle_delete_account(message['request_data'], message['timestamp'])
                 case 'send_personal_message':
-                    response = self.handle_send_personal_message(message)
+                    response = self.handle_send_personal_message(message['request_data'], message['timestamp'])
                 case 'add_friend':
-                    response = self.handle_add_friend(message)
+                    response = self.handle_add_friend(message['request_data'], message['timestamp'])
                 case 'get_friends':
-                    response = self.handle_get_friends(message)
+                    response = self.handle_get_friends(message['request_data'], message['timestamp'])
                 case 'delete_friend':
-                    response = self.handle_delete_friend(message)
+                    response = self.handle_delete_friend(message['request_data'], message['timestamp'])
                 case 'file_transfer':
-                    response = self.handle_file_transfer(message)
+                    response = self.handle_file_transfer(message['request_data'], message['timestamp'])
         if response:
             MessageServer.send_message(client_socket, response)
+    
+    def send_offline_messages(self, username, client_socket):
+        if self.message_queues.get(username):
+            for message in self.message_queues.get(username):
+                type = message['type']
+                if type == 'personal_message':
+                    personal_message = message['data']
+                    MessageServer.send_message(client_socket, personal_message)
+                elif type == 'file':
+                    request_data = message['data']
+                    file_path = request_data['file_path']
+                    message = message = mb.build_send_file_request(request_data['sender'], request_data['receiver'], request_data['file_name'], request_data['file_size'], request_data['timestamp'], request_data['chunk_size'])
+                    self.manager_instance.message_server.send_message(client_socket, message)
+                    time.sleep(0.3)
+                    success = self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
+                    if success:
+                        response_text = 'File transfer success'
+                    else:
+                        response_text = 'File transfer failed'
 
-    def handle_login(self, message, client_socket):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_login(self, request_data, request_timestamp, client_socket):
         username = request_data.get('username')
         password = request_data.get('password')
         success, response_text = self.user_manager.login_user(username, password)
         if success:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
+        self.send_offline_messages(username, client_socket)
         return mb.build_response(success, response_text, request_timestamp)
     
 
-    def handle_logout(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_logout(self, request_data, request_timestamp):
         username = request_data.get('username')
         if self.user_manager.is_online(username):
             self.user_manager.set_offline(username)
         return mb.build_response(True, 'logout success', request_timestamp)
 
-    def handle_register(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_register(self, request_data, request_timestamp):
         username = request_data.get('username')
         password = request_data.get('password')
         success, response_text = self.user_manager.register_user(username, password)
         return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_delete_account(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_delete_account(self, request_data, request_timestamp):
         username = request_data.get('username')
         password = request_data.get('password')
         success, response_text = self.user_manager.delete_account(username, password)
         return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_send_personal_message(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_send_personal_message(self, request_data, request_timestamp):
         receiver = request_data.get('receiver')
         if self.user_manager.is_online(receiver):
             receiver_client = self.user_manager.get_socket(receiver)
             success = MessageServer.send_message(receiver_client, request_data)
             if success: response_text = 'send success'
         else:
-            success, response_text = False, 'Receiver is not Online'
+            offline_message = {'type' : 'personal_message', 'data' : request_data, 'timestamp': request_timestamp}
+            self.message_queues.setdefault(receiver, []).append(offline_message)
+            success, response_text = True, 'Receiver is not Online, message will be sent when receiver is online'
         return mb.build_response(success, response_text, request_timestamp)
     
-    def handle_add_friend(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_add_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
         friend = request_data.get('friend')
         success, response_text = self.user_manager.add_friend(username, friend)
         return mb.build_response(success, response_text, request_timestamp)
     
-    def handle_get_friends(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_get_friends(self, request_data, request_timestamp):
         username = request_data.get('username')
         success, response_text, response_data = self.user_manager.get_friends(username)
         user_status_dict = {}
@@ -205,20 +215,14 @@ class MessageHandler:
             user_status_dict[user] = status
         return mb.build_response(success, response_text, request_timestamp, user_status_dict)
     
-    def handle_delete_friend(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_delete_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
         frient = request_data.get('frient')
         success, response_text = self.user_manager.delete_friend(username, frient)
         return mb.build_response(success, response_text, request_timestamp)
 
-    def handle_file_transfer(self, message):
-        request_data = message['request_data']
-        request_timestamp = message['timestamp']
+    def handle_file_transfer(self, request_data, request_timestamp):
         receiver = request_data.get('receiver')
-        if not self.user_manager.is_online(receiver):
-            return mb.build_response(False, 'Receiver is not Online', request_timestamp)
         file_name = request_data.get('file_name')
         file_size = request_data.get('file_size')
         chunk_size = request_data.get('chunk_size')
@@ -229,16 +233,21 @@ class MessageHandler:
         success = self.file_transfer_server.receive_file(file_path, chunk_size)
         if not success:
             return mb.build_response(False, 'File transfer failed', request_timestamp)
-        receiver_client = self.user_manager.get_socket(receiver)
-        message = mb.build_send_file_request(request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size)
-        self.manager_instance.message_server.send_message(receiver_client, message)
-        time.sleep(0.3)
-        success = self.file_transfer_server.send_file(file_path, chunk_size)
-        if success:
-            response_text = 'File transfer success'
+        if self.user_manager.is_online(receiver):
+            receiver_client = self.user_manager.get_socket(receiver)
+            message = message = mb.build_send_file_request(request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size)
+            self.manager_instance.message_server.send_message(receiver_client, message)
+            time.sleep(0.3)
+            success = self.file_transfer_server.send_file(file_path, chunk_size)
+            if success:
+                response_text = 'File transfer success'
+            else:
+                response_text = 'File transfer failed'
+            return mb.build_response(success, response_text, request_timestamp)
         else:
-            response_text = 'File transfer failed'
-        return mb.build_response(success, response_text, request_timestamp)
+            offline_message = {'type': 'file', 'data' : request_data, 'timestamp': request_timestamp, 'file_path': file_path}
+            self.message_queues.setdefault(receiver, []).append(offline_message)
+            return mb.build_response(True, 'Receiver is not Online, file will be transfered when receiver is online', request_timestamp)
 
 class FileTransferServer:
     def __init__(self, manager_instance):
