@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 import socket
 import json
@@ -149,8 +149,8 @@ class ChatConnection:
         while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
             if (time.time() - start_time > timelimit): break
 
-        # if self.response_cache is None:
-        #     return False
+        if self.response_cache is None:
+            return False
 
         if self.response_cache['timestamp'] == request_timestamp:
             return self.response_cache
@@ -174,7 +174,6 @@ class ChatClient(QMainWindow):
         # region 窗口组件
         self.setWindowTitle("Chat Client")
         self.setGeometry(100, 100, 300, 150)
-        self.setMinimumSize(800, 900)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -388,6 +387,8 @@ class ChatPage(QWidget):
         super().__init__(parent)
         self.parent = parent
 
+        self.setMinimumSize(900, 800)
+
         self.current_friend = None
         self.chat_pages = QStackedWidget()
         self.friend_list = QListWidget()
@@ -397,15 +398,21 @@ class ChatPage(QWidget):
 
     def init_UI(self):
         layout = QHBoxLayout(self)
-        self.setGeometry(100, 100, 800, 600)
 
+        V_layout = QVBoxLayout()
+        update_friends_list_button = QPushButton("Update List")
+        update_friends_list_button.clicked.connect(self.__update_friend_status)
+        update_friends_list_button.setFixedWidth(150)
+        update_friends_list_button.setStyleSheet("QPushButton{text-align:left;}")
+        V_layout.addWidget(update_friends_list_button)
+        V_layout.addWidget(self.friend_list)
+        layout.addLayout(V_layout)
         friend_list = ['None']
         self.friend_list.addItems(friend_list)  # TEST
         self.friend_list.setFixedWidth(150)
         self.friend_list.itemClicked.connect(self.__change_selected_friend)
-        layout.addWidget(self.friend_list)
+        # layout.addWidget(self.friend_list)
 
-        self.chat_pages.setMinimumWidth(400)
         for friend in friend_list:
             chat = self.__chatpage_factory(friend)
             if chat is not None:
@@ -414,8 +421,6 @@ class ChatPage(QWidget):
 
         self.setLayout(layout)
         self.setWindowTitle("Chat Page")
-        # self.setMinimumSize(700, 650)
-        # self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         pass
 
@@ -504,14 +509,13 @@ class ChatPage(QWidget):
     def __update_friend_status(self):
         # XXX 由于使用多线程时无法运行，所以在调用display_message时更新好友列表
 
-        # time.sleep(2)
         # while True:
         update_friend_list_request = mb.build_get_friends_request(CurrentUser.get_username())
         self.parent.connection.send_message(update_friend_list_request)
         response = self.parent.get_response(update_friend_list_request['timestamp'])
-        # if response is False:
-        #     # continue
-        #     return
+        if response is None or not response:
+            # continue
+            return
 
         if isinstance(response, bool):
             return
@@ -563,20 +567,35 @@ class ChatPage(QWidget):
 
         timestamp = add_friend_request['timestamp']
         response = self.parent.get_response(timestamp)  # 单向添加好友
-        if not response['success']:
+        if response is None or not response['success']:
+            QMessageBox.critical(self, "Error", "Failed to add friend.")
             return
 
         chat = self.__chatpage_factory(user_name)
-        if chat is None:
-            QMessageBox.critical(self, "Error", "Failed to add friend.")
         self.friend_list.addItem(user_name)
         self.chat_pages.addWidget(chat)
 
-        # 单向添加，
-        pass  # 可以在聊天界面中删除好友
-
     def remove_friend(self, friend_name):  # TODO 主动删除好友
-        pass  # 删除当前好友
+        user_name, status = QInputDialog.getText(self, "Delete Friend", "Enter the username of the friend:")
+        if status == False:
+            return
+
+        if user_name == self.current_friend:
+            QMessageBox.critical(
+                self, "Error", "You cannot delete your friend who you are currently chatting with."
+            )
+            return
+
+        remove_friend_request = mb.build_remove_friend_request(CurrentUser.get_username(), user_name)
+        self.parent.connection.send_message(remove_friend_request)
+
+        timestamp = remove_friend_request['timestamp']
+        response = self.parent.get_response(timestamp)  # 单向删除好友
+        if response is None or not response:
+            QMessageBox.critical(self, "Error", "Failed to remove friend.")
+            return
+
+        self.handle_delete_friend(user_name)
 
     def handle_add_friend(self, user_name):  # TODO 处理对方添加你为好友的情况
         for i in range(self.friend_list.count()):  # 遍历好友列表
@@ -633,14 +652,9 @@ class ChatPage(QWidget):
 
         displayer = chat.findChild(QTextEdit, 'MessageDisplayer')
         displayer.append(message + '\n')
-        name = CurrentUser.get_username()
-        if name != None:
-            displayer.append(name + '\n')
         displayer.moveCursor(displayer.textCursor().End)
 
-        self.__update_friend_status()
-
-        # 之后可以增加消息弹窗提示
+        # self.__update_friend_status()
 
     def send_file(self):  # TODO 使用QThread发送、接收文件，完毕后弹窗
         pass
@@ -711,3 +725,4 @@ if __name__ == '__main__':
 
 # TODO
 # 可以在页面上增加一个按钮，用来刷新好友状态
+# Chat_Connection类中不使用response_cache，而是收到response时直接调用Client相关函数进行处理
