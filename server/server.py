@@ -68,7 +68,6 @@ class MessageServer:
                 client_socket.close()
                 break
             except socket.timeout:
-                logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
                     logging.info(f"Connection with {client_address} is closed.")
                     if username: self.user_manager.set_offline(username)
