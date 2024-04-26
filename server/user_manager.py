@@ -107,6 +107,7 @@ class UserManager:
         
         # If friendship doesn't exist, then add the friend
         self.cursor.execute('INSERT INTO friendship (username, friendname) VALUES (?, ?)', (username, friend_username))
+        self.cursor.execute('INSERT INTO friendship (username, friendname) VALUES (?, ?)', (friend_username, username))
         self.conn.commit()
         return True, 'Friend added successfully'
 
@@ -115,6 +116,7 @@ class UserManager:
         if not self.is_username_exist(friend_username):
             return False, 'User is not exist'
         self.cursor.execute('DELETE FROM friendship WHERE username = ? AND friendname = ?', (username, friend_username))
+        self.cursor.execute('DELETE FROM friendship WHERE username = ? AND friendname = ?', (friend_username, username))
         self.conn.commit()
         return True, 'Friend removed successfully'
 

@@ -159,7 +159,7 @@ class ChatConnection:
 
 
 class ChatClient(QMainWindow):
-    response_signal = pyqtSignal(dict)
+    response_signal = pyqtSignal(dict)  # MARK
 
     def __init__(self, host, port):
         super().__init__()
@@ -174,7 +174,7 @@ class ChatClient(QMainWindow):
         # region 窗口组件
         self.setWindowTitle("Chat Client")
         self.setGeometry(100, 100, 300, 150)
-        self.setMinimumSize(400, 600)
+        self.setMinimumSize(800, 900)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -396,7 +396,8 @@ class ChatPage(QWidget):
         # threading.Thread(target=self.__update_friend_status, daemon=True).start()
 
     def init_UI(self):
-        layout = QHBoxLayout()
+        layout = QHBoxLayout(self)
+        self.setGeometry(100, 100, 800, 600)
 
         friend_list = ['None']
         self.friend_list.addItems(friend_list)  # TEST
@@ -404,6 +405,7 @@ class ChatPage(QWidget):
         self.friend_list.itemClicked.connect(self.__change_selected_friend)
         layout.addWidget(self.friend_list)
 
+        self.chat_pages.setMinimumWidth(400)
         for friend in friend_list:
             chat = self.__chatpage_factory(friend)
             if chat is not None:
@@ -412,6 +414,8 @@ class ChatPage(QWidget):
 
         self.setLayout(layout)
         self.setWindowTitle("Chat Page")
+        # self.setMinimumSize(700, 650)
+        # self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         pass
 
@@ -509,13 +513,13 @@ class ChatPage(QWidget):
         #     # continue
         #     return
 
-        if isinstance(response, tuple):
+        if isinstance(response, bool):
             return
 
         if response['success']:
 
             friend_list = response['data']
-            if len(friend_list) == 0:
+            if friend_list is None:
                 # continue
                 return
 
