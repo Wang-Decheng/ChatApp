@@ -2,17 +2,18 @@ const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const { MessageBuilder, Utils } = require("./utils");
 const net = require("net");
 const { log } = require("console");
+const { create } = require("domain");
 
 const serverHost = "127.0.0.1"; // 指定服务器的 IP 地址
 const serverPort = 9999; // 指定服务器的端口号
-var id;
 let timeStampBuffer = {};
 const requestType = {
     REGISTER: "register",
     LOGIN: "login",
     GETFRIENDSLIST: "getFriendsList"
 }
-
+var id;
+var friendsList;
 
 function sleep(time) {
     var timeStamp = new Date().getTime();
@@ -25,7 +26,6 @@ function sleep(time) {
 }
 
 const createLoginWindow = () => {
-
     const mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
@@ -81,6 +81,20 @@ const createAddFriendWindow = () => {
     //mainWindow.webContents.openDevTools();
 };
 
+const createDeleteFriendWindow = () => {
+    const mainWindow = new BrowserWindow({
+        width: 400,
+        height: 150,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+    });
+
+    mainWindow.loadFile("deleteFriendWin.html");
+    //mainWindow.webContents.openDevTools();
+};
+
 const register = (event, data) => {
     const { username, password } = data; //数据解封装
     const registerRequest = MessageBuilder.build_register_request(
@@ -117,11 +131,6 @@ const register = (event, data) => {
 const login = (event, data) => {
     const { username, password } = data;
     id = username;
-    let friendslist;
-
-    ipcMain.handle("getId", () => {
-        return username;
-    });
 
     const loginRequest = MessageBuilder.build_login_request(username, password);
     const loginRequestJson = JSON.stringify(loginRequest);
@@ -141,7 +150,7 @@ const login = (event, data) => {
         client.write(friendsListRequestJson);
         setInterval(() => {
             client.write(friendsListRequestJson);
-        }, 10000);  //每隔10秒发送一次获取好友列表请求
+        }, 1000);  //每隔1秒发送一次获取好友列表请求
     });
 
     client.on("data", (data) => {
@@ -161,8 +170,8 @@ const login = (event, data) => {
                     });
                 }
             } else if (responseType === requestType.GETFRIENDSLIST) {
-                //console.log(11111)
-
+                friendsList = jsonData.data;
+                console.log(friendsList);
             }
         }
 
@@ -194,6 +203,39 @@ const getFriendNameAndAdd = (event, data) => {
     client.on("data", (data) => {
         const jsonData = JSON.parse(data);
         console.log("Received JSON data:", jsonData);
+        if (jsonData.success === true) {
+            dialog.showMessageBox({
+                type: "info",
+                message: jsonData.message,
+                buttons: ["确定"],
+            });
+        }
+    });
+}
+
+const deleteFriend = (event, data) => {
+    createDeleteFriendWindow();
+}
+
+const getFriendNameAndDelete = (event, data) => {
+    const friendName = data;
+    client = new net.Socket();
+    const deleteFriendRequest = MessageBuilder.build_remove_friend_request(id, friendName);
+    const deleteFriendRequestJson = JSON.stringify(deleteFriendRequest);
+    console.log(deleteFriendRequestJson);
+    client.connect(serverPort, serverHost, () => {
+        client.write(deleteFriendRequestJson);
+    });
+    client.on("data", (data) => {
+        const jsonData = JSON.parse(data);
+        console.log("Received JSON data:", jsonData);
+        if (jsonData.success === true) {
+            dialog.showMessageBox({
+                type: "info",
+                message: jsonData.message,
+                buttons: ["确定"],
+            });
+        }
     });
 }
 
@@ -258,7 +300,21 @@ app.whenReady().then(() => {
 
     ipcMain.on("addFriend", addfriend);
 
-    ipcMain.on("addFriendName",getFriendNameAndAdd);
+    ipcMain.on("getFriendNameAndAdd",getFriendNameAndAdd);
+
+    ipcMain.on("deleteFriend",deleteFriend);
+
+    ipcMain.on("getFriendNameAndDelete",getFriendNameAndDelete);
+
+    // 主进程创建事件   
+    ipcMain.handle("getFriendsList", () => {
+        return friendsList;
+    });
+
+    ipcMain.handle("getId", () => {
+        return id;
+    });
+
 });
 
 // 除了 macOS 外，当所有窗口都被关闭的时候退出程序。 因此, 通常对应用程序和它们的菜单栏来说应该时刻保持激活状态,直到用户使用 Cmd + Q 明确退出

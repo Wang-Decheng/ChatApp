@@ -100,7 +100,12 @@ class MessageBuilder {
 
     static build_add_friend_request(username, friend){
         const request_data = { username: username, friend: friend };
-        return MessageBuilder.__build_request('get_friends', request_data);
+        return MessageBuilder.__build_request('add_friend', request_data);
+    }
+
+    static build_remove_friend_request(username, friend){
+        const request_data = { username: username, friend: friend };
+        return MessageBuilder.__build_request('remove_friend', request_data);
     }
 
     static build_send_personal_message_request(sender, receiver, content) {

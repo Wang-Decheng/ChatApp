@@ -194,8 +194,16 @@
       </div>
       <div class="line"></div>
       <div class="foot">
-        <button id="addFriendBtn" class="functionButton" onclick="addFriend()">添加好友</button>
-        <button id="removeFriendBtn" class="functionButton">删除好友</button>
+        <button id="addFriendBtn" class="functionButton" onclick="addFriend()">
+          添加好友
+        </button>
+        <button
+          id="removeFriendBtn"
+          class="functionButton"
+          onclick="deleteFriend()"
+        >
+          删除好友
+        </button>
       </div>
     </div>
 
@@ -212,19 +220,59 @@
       ipcRenderer.send("addFriend");
     };
 
-    document.addEventListener("DOMContentLoaded", () => {
-      // const chatBeginBtns = document.querySelectorAll(".chatButton")
-      // //console.log(chatBeginBtns);
-      // chatBeginBtns.forEach((btn) => {
-      //   btn.addEventListener("click", () => {
-      //     ipcRenderer.send("chatBegin");
-      //   });
-      // });
+    const deleteFriend = () => {
+      ipcRenderer.send("deleteFriend");
+    };
 
-      // const addFriendBtn = document.getElementById("addFriendBtn");
-      // addFriendBtn.addEventListener("click", () => {
-      //   ipcRenderer.send("addFriend");
-      // });
-    });
+    const middleBlock = document.querySelector(".middle");
+    var replacementContent;
+
+    ipcRenderer
+      .invoke("getFriendsList")
+      .then((data) => {
+        friendList = data;
+        replacementContent = "";
+        for (friend in friendList) {
+          replacementContent +=
+            '<div class="friend">' +
+            '<div class="friendId">' +
+            friend +
+            "</div>" +
+            '<div class="status">' +
+            (friendList.friend == true ? "在线" : "离线") +
+            "</div>" +
+            '<button class="chatButton" onclick="chatBegin()">开始聊天</button>' +
+            "</div>";
+        }
+        middleBlock.innerHTML = replacementContent;
+      })
+      .catch((error) => {
+        console.error("Failed to get friend list:", error);
+      });
+
+    setInterval(() => {
+      ipcRenderer
+        .invoke("getFriendsList")
+        .then((data) => {
+          friendList = data;
+          replacementContent = "";
+          for (friend in friendList) {
+            replacementContent +=
+              '<div class="friend">' +
+              '<div class="friendId">' +
+              friend +
+              "</div>" +
+              '<div class="status">' +
+              (friendList.friend == true ? "在线" : "离线") +
+              "</div>" +
+              '<button class="chatButton" onclick="chatBegin()">开始聊天</button>' +
+              "</div>";
+          }
+          middleBlock.innerHTML = replacementContent;
+        })
+        .catch((error) => {
+          console.error("Failed to get friend list:", error);
+        });
+    }, 1000);
   </script>
 </html>

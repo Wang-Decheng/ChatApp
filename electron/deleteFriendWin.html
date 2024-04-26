@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>加好友</title>
+  <title>删好友</title>
   <style>
     .input-container {
       margin: 20px;
@@ -34,7 +34,7 @@
     function addFriend() {
       var friendName = document.getElementById('friendName').value;
       console.log('要添加的好友名字：', friendName);
-      ipcRenderer.send('getFriendNameAndAdd', friendName);
+      ipcRenderer.send('getFriendNameAndDelete', friendName);
     }
   </script>
 </body>
