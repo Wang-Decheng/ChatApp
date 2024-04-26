@@ -62,13 +62,13 @@ class MessageServer:
                         self.user_manager.set_offline(username)
                         username = message['who']
                         self.user_manager.set_online(username, client_socket)
-                else: self.messagehandler.handle_message(message, client_socket)
+                else:
+                    self.messagehandler.handle_message(message, client_socket)
             except json.JSONDecodeError as e:
                 logging.error(str(e))
                 client_socket.close()
                 break
             except socket.timeout:
-                logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
                     logging.info(f"Connection with {client_address} is closed.")
                     if username: self.user_manager.set_offline(username)
@@ -133,8 +133,8 @@ class MessageHandler:
                     response = self.handle_add_friend(message['request_data'], message['timestamp'])
                 case 'get_friends':
                     response = self.handle_get_friends(message['request_data'], message['timestamp'])
-                case 'delete_friend':
-                    response = self.handle_delete_friend(message['request_data'], message['timestamp'])
+                case 'remove_friend':
+                    response = self.handle_remove_friend(message['request_data'], message['timestamp'])
                 case 'file_transfer':
                     response = self.handle_file_transfer(message['request_data'], message['timestamp'])
         if response:
@@ -166,11 +166,11 @@ class MessageHandler:
         if success:
             self.user_manager.set_online(username, client_socket)
         logging.debug(self.user_manager.is_online(username))
-        self.send_offline_messages(username, client_socket)
         return mb.build_response(success, response_text, request_timestamp)
-    
 
-    def handle_logout(self, request_data, request_timestamp):
+    def handle_logout(self, message):
+        request_data = message['request_data']
+        request_timestamp = message['timestamp']
         username = request_data.get('username')
         if self.user_manager.is_online(username):
             self.user_manager.set_offline(username)
@@ -218,7 +218,7 @@ class MessageHandler:
     def handle_delete_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
         frient = request_data.get('frient')
-        success, response_text = self.user_manager.delete_friend(username, frient)
+        success, response_text = self.user_manager.remove_friend(username, frient)
         return mb.build_response(success, response_text, request_timestamp)
 
     def handle_file_transfer(self, request_data, request_timestamp):
