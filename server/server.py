@@ -215,10 +215,10 @@ class MessageHandler:
             user_status_dict[user] = status
         return mb.build_response(success, response_text, request_timestamp, user_status_dict)
     
-    def handle_delete_friend(self, request_data, request_timestamp):
+    def handle_remove_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
-        frient = request_data.get('frient')
-        success, response_text = self.user_manager.remove_friend(username, frient)
+        friend = request_data.get('friend')
+        success, response_text = self.user_manager.remove_friend(username, friend)
         return mb.build_response(success, response_text, request_timestamp)
 
     def handle_file_transfer(self, request_data, request_timestamp):
