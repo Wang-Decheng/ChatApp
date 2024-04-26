@@ -67,7 +67,12 @@ class MessageBuilder:
             'data': data
         }
         return message_data
-
+    def build_get_friends_response_data(friends):
+        response_data = {
+            'type': 'friends',
+            'friends': friends
+        }
+        return response_data
     # 生成心跳包
     @staticmethod
     def build_heartbeat(who):
