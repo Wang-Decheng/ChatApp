@@ -5,7 +5,7 @@ call activate chat
 
 rem Set environment variable
 set LOCAL=True
-@REM set DEBUG=True
+set DEBUG=True
 
 rem Start the server
 start cmd /k python ./server/server.py

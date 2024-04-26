@@ -240,6 +240,12 @@ def debug_send_file(reciver):
     # file_path = './wdc_debug/test.txt'
     connection.send_file(username, reciver, file_path)
 
+def debug_remove_friend(connection, friend):
+    username = CurrentUser.get_username()
+    message = mb.build_remove_friend_request(username, friend)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
 
 if __name__ == '__main__':
     ip_address = '127.0.0.1'
@@ -248,6 +254,11 @@ if __name__ == '__main__':
     connection.start_connect()
     username = 'user' + sys.argv[1]
     debug_login_as(connection, username)
-    time.sleep(1)
     if sys.argv[1] == '1':
-        debug_send_file('user2')
+        debug_add_friend(connection, 'user2')
+        time.sleep(0.5)
+        debug_get_friends()
+        time.sleep(0.5)
+        debug_remove_friend(connection, 'user2')
+        time.sleep(0.5)
+        debug_get_friends()
