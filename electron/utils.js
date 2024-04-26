@@ -98,6 +98,11 @@ class MessageBuilder {
         return MessageBuilder.__build_request('get_friends', request_data);
     }
 
+    static build_add_friend_request(username, friend){
+        const request_data = { username: username, friend: friend };
+        return MessageBuilder.__build_request('get_friends', request_data);
+    }
+
     static build_send_personal_message_request(sender, receiver, content) {
         return MessageBuilder.__build_request('send_personal_message', {
             type: 'personal_message',

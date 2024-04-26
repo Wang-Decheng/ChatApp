@@ -133,13 +133,13 @@
         <div class="friend">
           <div class="friendId">User1</div>
           <div class="status">在线</div>
-          <button class="chatButton">开始聊天</button>
+          <button class="chatButton" onclick="chatBegin()">开始聊天</button>
         </div>
 
         <div class="friend">
           <div class="friendId">User1</div>
           <div class="status">在线</div>
-          <button class="chatButton">开始聊天</button>
+          <button class="chatButton" onclick="chatBegin()">开始聊天</button>
         </div>
 
         <div class="friend">
@@ -194,7 +194,7 @@
       </div>
       <div class="line"></div>
       <div class="foot">
-        <button id="addFriendBtn" class="functionButton">添加好友</button>
+        <button id="addFriendBtn" class="functionButton" onclick="addFriend()">添加好友</button>
         <button id="removeFriendBtn" class="functionButton">删除好友</button>
       </div>
     </div>
@@ -204,16 +204,27 @@
   <script>
     const { ipcRenderer, remote } = require("electron");
 
-    document.addEventListener("DOMContentLoaded", () => {
-      const chatBeginBtns = document.querySelectorAll(".chatButton")
-      //console.log(chatBeginBtns);
-      chatBeginBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          ipcRenderer.send("chatBegin");
-        });
-      });
+    const chatBegin = () => {
+      ipcRenderer.send("chatBegin");
+    };
 
-      ipcRenderer.send("getFriendList", )
+    const addFriend = () => {
+      ipcRenderer.send("addFriend");
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // const chatBeginBtns = document.querySelectorAll(".chatButton")
+      // //console.log(chatBeginBtns);
+      // chatBeginBtns.forEach((btn) => {
+      //   btn.addEventListener("click", () => {
+      //     ipcRenderer.send("chatBegin");
+      //   });
+      // });
+
+      // const addFriendBtn = document.getElementById("addFriendBtn");
+      // addFriendBtn.addEventListener("click", () => {
+      //   ipcRenderer.send("addFriend");
+      // });
     });
   </script>
 </html>

@@ -5,6 +5,7 @@ const { log } = require("console");
 
 const serverHost = "127.0.0.1"; // 指定服务器的 IP 地址
 const serverPort = 9999; // 指定服务器的端口号
+var id;
 let timeStampBuffer = {};
 const requestType = {
     REGISTER: "register",
@@ -12,16 +13,16 @@ const requestType = {
     GETFRIENDSLIST: "getFriendsList"
 }
 
+
 function sleep(time) {
-    return new Promise(resolve => setTimeout(resolve, time));
+    var timeStamp = new Date().getTime();
+    var endTime = timeStamp + time;
+    while (true) {
+        if (new Date().getTime() > endTime) {
+            return;
+        }
+    }
 }
-
-
-async function wait(time) {
-    await sleep(time); 
-}
-
-
 
 const createLoginWindow = () => {
 
@@ -66,6 +67,20 @@ const createChatWindow = () => {
     mainWindow.webContents.openDevTools();
 };
 
+const createAddFriendWindow = () => {
+    const mainWindow = new BrowserWindow({
+        width: 400,
+        height: 150,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+    });
+
+    mainWindow.loadFile("addFriendWin.html");
+    //mainWindow.webContents.openDevTools();
+};
+
 const register = (event, data) => {
     const { username, password } = data; //数据解封装
     const registerRequest = MessageBuilder.build_register_request(
@@ -101,29 +116,28 @@ const register = (event, data) => {
 
 const login = (event, data) => {
     const { username, password } = data;
-
-    const id = username;
+    id = username;
     let friendslist;
 
     ipcMain.handle("getId", () => {
-        return id;
+        return username;
     });
 
     const loginRequest = MessageBuilder.build_login_request(username, password);
     const loginRequestJson = JSON.stringify(loginRequest);
     timeStampBuffer[loginRequest.timestamp] = requestType.LOGIN;
 
-    wait(1000); //发送间隔一秒，以获得不同的时间戳
+    sleep(1000); //间隔一秒，以获得不同的时间戳
 
-    const friendsListRequest = MessageBuilder.build_get_friends_list_request(id);
+    const friendsListRequest = MessageBuilder.build_get_friends_list_request(username);
     const friendsListRequestJson = JSON.stringify(friendsListRequest);
     timeStampBuffer[friendsListRequest.timestamp] = requestType.GETFRIENDSLIST;
-
 
     const client = new net.Socket();
 
     client.connect(serverPort, serverHost, () => {
         client.write(loginRequestJson);
+        sleep(1000); //间隔几秒，防止粘包
         client.write(friendsListRequestJson);
         setInterval(() => {
             client.write(friendsListRequestJson);
@@ -147,7 +161,8 @@ const login = (event, data) => {
                     });
                 }
             } else if (responseType === requestType.GETFRIENDSLIST) {
-                console.log(11111)
+                //console.log(11111)
+
             }
         }
 
@@ -162,6 +177,25 @@ const login = (event, data) => {
 const chat = (event, data) => {
     createChatWindow();
 };
+
+const addfriend = (event, data) => {
+    createAddFriendWindow();
+};
+
+const getFriendNameAndAdd = (event, data) => {
+    const friendName = data;
+    client = new net.Socket();
+    const addFriendRequest = MessageBuilder.build_add_friend_request(id, friendName);
+    const addFriendRequestJson = JSON.stringify(addFriendRequest);
+    console.log(addFriendRequestJson);
+    client.connect(serverPort, serverHost, () => {
+        client.write(addFriendRequestJson);
+    });
+    client.on("data", (data) => {
+        const jsonData = JSON.parse(data);
+        console.log("Received JSON data:", jsonData);
+    });
+}
 
 const whichType = (responseType, jsonData) => {
     switch (responseType) {
@@ -221,6 +255,10 @@ app.whenReady().then(() => {
     ipcMain.on("login", login);
 
     ipcMain.on("chatBegin", chat);
+
+    ipcMain.on("addFriend", addfriend);
+
+    ipcMain.on("addFriendName",getFriendNameAndAdd);
 });
 
 // 除了 macOS 外，当所有窗口都被关闭的时候退出程序。 因此, 通常对应用程序和它们的菜单栏来说应该时刻保持激活状态,直到用户使用 Cmd + Q 明确退出
