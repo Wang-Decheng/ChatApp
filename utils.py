@@ -91,7 +91,8 @@ class MessageBuilder:
     def build_login_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.__build_request('login', request_data)
-    
+
+    @staticmethod
     def build_logout_request(username):
         request_data = {'username': username}
         return MessageBuilder.__build_request('logout', request_data)
@@ -105,20 +106,20 @@ class MessageBuilder:
     def build_delete_account_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.__build_request('delete_account', request_data)
-    
+
     @staticmethod
     def build_add_friend_request(username, friend):
-        request_data = {'username': username,'friend': friend}
+        request_data = {'username': username, 'friend': friend}
         return MessageBuilder.__build_request('add_friend', request_data)
-    
+
     @staticmethod
     def build_get_friends_request(username):
         request_data = {'username': username}
         return MessageBuilder.__build_request('get_friends', request_data)
-    
+
     @staticmethod
     def build_remove_friend_request(username, friend):
-        request_data = {'username': username,'friend': friend}
+        request_data = {'username': username, 'friend': friend}
         return MessageBuilder.__build_request('remove_friend', request_data)
 
     @staticmethod
@@ -143,32 +144,15 @@ class MessageBuilder:
         }
         return MessageBuilder.__build_request('send_group_messager', message_data)
 
-    # MARK 增加文件传输请求数据包、文件内容数据包等
-    @staticmethod
-    def build_file_transfer_header(sender, receiver, file_name, file_size, accept_or_refuse):
-        message_data = {
-            'type': 'file_tranfer_header',
+    def build_send_file_request(sender, receiver, file_name, file_size, timestamp = time.time(), chunk_size = 1024):
+        request_data = {
             'sender': sender,
             'receiver': receiver,
             'file_name': file_name,
             'file_size': file_size,
-            'accept_or_refuse': accept_or_refuse,
-            'timestamp': time.time()
+            'chunk_size': chunk_size,
+            'timestamp': timestamp
         }
-        return MessageBuilder.__build_request('file_transfer_header', message_data)
-
-    @staticmethod
-    def build_file_data(sender, receiver, file_name, file_content):
-        message_data = {
-            'type': 'file_data',
-            'sender': sender,
-            'receiver': receiver,
-            'file_name': file_name,
-            'file_content': file_content,
-            'timestamp': time.time()
-        }
-        return MessageBuilder.__build_request('file_data', message_data)
-
-
+        return MessageBuilder.__build_request('file_transfer', request_data)
     
     # endregion
