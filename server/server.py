@@ -6,12 +6,11 @@ from datetime import datetime
 import logging
 import sys
 import time
-
-import user_manager as usermanager
+import configparser
 
 sys.path.append(".")
-
 from utils import MessageBuilder as mb
+import user_manager as usermanager
 
 class Manager:
     _instance = None
@@ -25,40 +24,32 @@ class Manager:
         return cls._instance
     
     def __init__(self):
-        ip_address = '127.0.0.1'
-        message_port = 9999
-        file_transfer_port = 9998
-        self.file_transfer_server = FileTransferServer(ip_address, file_transfer_port, self)
+        self.file_transfer_server = FileTransferServer(self)
         self.user_manager = usermanager.UserManager()
         self.messagehandler = MessageHandler(manager_instance=self)
-        self.message_server = MessageServer(ip_address, message_port, manager_instance=self)
+        self.message_server = MessageServer(manager_instance=self)
         self.message_server.start()
 
 class MessageServer:
-    def __init__(self, host, port, heartbeat_timeout=30, manager_instance=None):
-        self.host = host
-        self.port = port
-        self.timeout = heartbeat_timeout
+    def __init__(self, manager_instance):
+        config = Config()
+        self.host = config.host
+        self.port = config.message_port
+        self.timeout = config.heartbeat_timeout
+        self.socket_timeout = config.socket_timeout
         self.manager_instace = manager_instance
         self.user_manager = manager_instance.user_manager
         self.messagehandler = manager_instance.messagehandler
 
     def handle_client(self, client_socket, client_address):
-        client_socket.settimeout(15)
+        client_socket.settimeout(self.socket_timeout)
         last_heartbeat_time = datetime.now()
         username = None
         while True:
             try:
                 message_json = client_socket.recv(1024).decode('utf-8')
-                logging.info("server receive message:" + message_json)
+                logging.debug("server receive message:" + message_json)
                 message = json.loads(message_json)
-                # message_length = int.from_bytes(client_socket.recv(4), byteorder='big')
-                # message_bytes = client_socket.recv(message_length)
-                # message = pickle.loads(message_bytes)
-                # if message['type'] == 'request' and message['action'] == 'file_data':
-                #     logging.info(f"server receive message: file_data")
-                # else:
-                #     logging.info(f"server receive message: {message}")
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -72,16 +63,15 @@ class MessageServer:
                         self.user_manager.set_online(username, client_socket)
                 else: self.messagehandler.handle_message(message, client_socket)
             except json.JSONDecodeError as e:
-                logging.info(str(e))
+                logging.error(str(e))
                 client_socket.close()
                 break
             except socket.timeout:
                 logging.debug("socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
-                    pass # 暂时停用心跳包机制
-                    # logging.info(f"Connection with {client_address} is closed.")
-                    # if username: self.user_manager.set_offline(username)
-                    # client_socket.close()
+                    logging.info(f"Connection with {client_address} is closed.")
+                    if username: self.user_manager.set_offline(username)
+                    client_socket.close()
             except ConnectionResetError:
                 logging.info(f"Connection with {client_address} is closed.")
                 if username: self.user_manager.set_offline(username)
@@ -94,24 +84,21 @@ class MessageServer:
 
     @staticmethod
     def send_message(client_socket, message):
-        if message is None:  # 空消息不发送
+        if message is None:
             return
-        # message_bytes = pickle.dumps(message)
-        # client_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
-        # return client_socket.send(message_bytes)
         message_json = json.dumps(message)
-        logging.info("Send message:" + message_json)
+        logging.debug("Send message:" + message_json)
         return client_socket.send(message_json.encode('utf-8'))
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
         server_socket.listen(5)
-        print(f"Server started on {self.host}:{self.port}")
+        logging.info(f"Server started on {self.host}:{self.port}")
 
         while True:
             client_socket, client_address = server_socket.accept()
-            print(f"Client connected from {client_address[0]}:{client_address[1]}")
+            logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
             client_handler = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
             client_handler.start()
         
@@ -121,6 +108,8 @@ class MessageHandler:
         self.manager_instance = manager_instance
         self.user_manager = self.manager_instance.user_manager
         self.file_transfer_server = self.manager_instance.file_transfer_server
+        config = Config()
+        self.file_transfer_interval =  config.file_transfer_interval
 
     def handle_message(self, message, client_socket):
         type = message['type']
@@ -233,25 +222,29 @@ class MessageHandler:
         file_name = request_data.get('file_name')
         file_size = request_data.get('file_size')
         chunk_size = request_data.get('chunk_size')
-        destination_folder = f'files/{receiver}'
+        destination_folder = f'server_files/{receiver}'
         if not os.path.exists(destination_folder):
             os.makedirs(destination_folder)
         file_path = os.path.join(destination_folder, file_name)
         success = self.file_transfer_server.receive_file(file_path, chunk_size)
         if not success:
             return mb.build_response(False, 'File transfer failed', request_timestamp)
-        # 发送文件
         receiver_client = self.user_manager.get_socket(receiver)
         message = mb.build_send_file_request(request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size)
         self.manager_instance.message_server.send_message(receiver_client, message)
         time.sleep(0.3)
-        self.file_transfer_server.send_file(file_path, chunk_size)
-
+        success = self.file_transfer_server.send_file(file_path, chunk_size)
+        if success:
+            response_text = 'File transfer success'
+        else:
+            response_text = 'File transfer failed'
+        return mb.build_response(success, response_text, request_timestamp)
 
 class FileTransferServer:
-    def __init__(self, host, port, manager_instance):
-        self.host = host
-        self.port = port
+    def __init__(self, manager_instance):
+        configparser = Config()
+        self.host = configparser.host
+        self.port = configparser.file_transfer_port
         self.manager_instance = manager_instance
 
     def receive_file(self, file_path ,chunk_size):
@@ -259,7 +252,7 @@ class FileTransferServer:
         self.socket.bind((self.host, self.port))
         self.socket.listen(1)
         client_socket, client_address = self.socket.accept()
-        print(f"Client connected from {client_address[0]}:{client_address[1]}")
+        logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'wb') as f:
             while True:
                 data = client_socket.recv(chunk_size)
@@ -276,7 +269,7 @@ class FileTransferServer:
         self.socket.bind((self.host, self.port))
         self.socket.listen(1)
         client_socket, client_address = self.socket.accept()
-        print(f"Client connected from {client_address[0]}:{client_address[1]}")
+        logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'rb') as f:
             while True:
                 data = f.read(chunk_size)
@@ -287,21 +280,46 @@ class FileTransferServer:
         logging.info(f"File {file_path} sent")
         return True
 
+class Config:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    def __init__(self, config_file='./server/config.ini'):
+        self.config = configparser.ConfigParser()
+        self.config.read(config_file)
+        if os.environ.get('LOCAL'):
+            self.host = self.config['Local']['host']
+            self.message_port = int(self.config['Local']['message_port'])
+            self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
+        else:
+            self.host = self.config['Remote']['host']
+            self.message_port = int(self.config['Remote']['message_port'])
+            self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
+        self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
+        self.socket_timeout = int(self.config['Server']['socket_timeout'])
+        self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
+
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
     logger = logging.getLogger()
-    logger.setLevel(level)
+    logger.setLevel(logging.DEBUG)
+
     if not logger.handlers:
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        file_handler = logging.FileHandler('s-debug.log')
-        file_handler.setLevel(logging.DEBUG)
+        file_handler = logging.FileHandler('server.log')
+        file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-
 
 if __name__ == '__main__':
     config_logging()
