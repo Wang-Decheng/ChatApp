@@ -231,24 +231,26 @@
     </div>
     <script>
       const { ipcRenderer, remote } = require("electron");
+      let friendId;
 
       window.onload = () => {
+        ipcRenderer.on('getFriendId', (event, data) => {
+          friendId = data;
+        })
+
+
         let id;
         ipcRenderer
           .invoke("getId")
           .then((data) => {
             id = data;
-            document.getElementById("chatWithWho").innerText = id;
+            document.getElementById("chatWithWho").innerText = friendId;
           })
           .catch((error) => {
             console.error("Failed to get id:", error);
           });
       };
 
-      //   const chatTopElement = document.querySelector(".chat_top");
-      //   const leftNameElement = document.querySelector(".chat_left_name");
-      //   chatTopElement.textContent = id;
-      //   leftNameElement.textContent = id;
 
       // 成功发送
       var send_message = document.getElementById("chat_middle_item");

@@ -1,8 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const { MessageBuilder, Utils } = require("./utils");
 const net = require("net");
-const { log } = require("console");
-const { create } = require("domain");
 
 const serverHost = "127.0.0.1"; // 指定服务器的 IP 地址
 const serverPort = 9999; // 指定服务器的端口号
@@ -53,7 +51,7 @@ const createFriendsWindow = () => {
     mainWindow.webContents.openDevTools();
 };
 
-const createChatWindow = () => {
+const createChatWindow = (friendId) => {
     const mainWindow = new BrowserWindow({
         width: 800,
         height: 1000,
@@ -65,6 +63,8 @@ const createChatWindow = () => {
 
     mainWindow.loadFile("chatWin.html");
     mainWindow.webContents.openDevTools();
+
+    mainWindow.webContents.send('getFriendId', friendId);
 };
 
 const createAddFriendWindow = () => {
@@ -184,7 +184,8 @@ const login = (event, data) => {
 };
 
 const chat = (event, data) => {
-    createChatWindow();
+    const friendId = data;
+    createChatWindow(friendId);
 };
 
 const addfriend = (event, data) => {
