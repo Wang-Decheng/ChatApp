@@ -12,6 +12,8 @@ from datetime import datetime
 import struct
 import pickle
 import inspect
+import concurrent.futures
+
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -134,19 +136,14 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit=1):  # FIXME
+    def get_response(self, request_timestamp, timelimit = 5):  # FIXME
         start_time = time.time()
-        while (self.response_cache is None or self.response_cache['timestamp'] < request_timestamp):
+        while True:
+            time.sleep(0.2)
+            if self.response_cache is None: continue
+            if self.response_cache['timestamp'] == request_timestamp: return self.response_cache
             if (time.time() - start_time > timelimit): break
-
-        if self.response_cache is None:
-            return False
-
-        if self.response_cache['timestamp'] == request_timestamp:
-            return self.response_cache
-        else:
-            return False  # MARK 更改了函数的返回值，从tuple改成bool
-
+        return False
 
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)  # MARK
@@ -221,7 +218,9 @@ class ChatClient(QMainWindow):
         return response['success']
 
     def get_response(self, request_timestamp):
-        return self.connection.get_response(request_timestamp)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.connection.get_response, request_timestamp)
+            return future.result()
 
 
 class MainPage(QWidget):
