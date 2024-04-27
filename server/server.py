@@ -153,6 +153,7 @@ class MessageHandler:
     
     def send_offline_messages(self, username, client_socket):
         if self.message_queues.get(username):
+            time.sleep(5)
             for message in self.message_queues.get(username):
                 type = message['type']
                 if type == 'personal_message':
