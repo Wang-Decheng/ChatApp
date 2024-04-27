@@ -157,8 +157,8 @@ class MessageHandler:
             MessageServer.send_message(client_socket, response)
 
     def send_offline_messages(self, username, client_socket):
+        time.sleep(5)
         if self.message_queues.get(username):
-            time.sleep(5)
             for message in self.message_queues.get(username):
                 type = message['type']
                 if type == 'personal_message':
@@ -182,7 +182,7 @@ class MessageHandler:
         success, response_text = self.user_manager.login_user(username, password)
         if success:
             self.user_manager.set_online(username, client_socket)
-        self.send_offline_messages(username, client_socket)
+        threading.Thread(target=self.send_offline_messages, args=(username, client_socket)).start()
         return mb.build_response(success, response_text, request_timestamp)
 
     def handle_logout(self, message):
