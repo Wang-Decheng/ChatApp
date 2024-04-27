@@ -48,6 +48,7 @@ class ChatConnection:
         self.parent = None
 
         self.friend_status_cache = None
+        self.stop_flag = False
 
     def start_connect(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -88,8 +89,8 @@ class ChatConnection:
                 self.disconnect()
             except json.JSONDecodeError:
                 logging.error("Error decoding JSON message")
-            # except KeyError as e:
-            #     logging.error(f"Missing key in message: {e}")
+            except KeyError as e:
+                logging.error(f"Missing key in message: {e}")
 
     def handle_message(self, message):  # TODO 收到消息后在此进行处理
         if message.get('action') is not None:  # 对数据进行拆包
@@ -494,7 +495,7 @@ class ChatPage(QWidget):
         # 返回主界面按钮
         back_button = QPushButton("Back")
         back_button.setObjectName('BackButton')
-        back_button.clicked.connect(self.parent.show_main_page)
+        back_button.clicked.connect(self.__log_out)
         layout.addWidget(back_button)
 
         chat.setLayout(layout)
@@ -552,7 +553,12 @@ class ChatPage(QWidget):
 
             # time.sleep(10)
 
-    def add_friend(self, friend_name):  # TODO 主动添加好友
+    def __log_out(self):
+        self.parent.connection.send_message(mb.build_logout_request(CurrentUser.get_username()))
+        self.parent.show_main_page()
+        pass
+
+    def add_friend(self, friend_name):
         user_name, status = QInputDialog.getText(self, "Add Friend", "Enter the username of the friend:")
         if status == False:
             return
@@ -570,7 +576,7 @@ class ChatPage(QWidget):
         self.friend_list.addItem(user_name)
         self.chat_pages.addWidget(chat)
 
-    def remove_friend(self, friend_name):  # TODO 主动删除好友
+    def remove_friend(self, friend_name):
         user_name, status = QInputDialog.getText(self, "Delete Friend", "Enter the username of the friend:")
         if status == False:
             return
@@ -592,7 +598,7 @@ class ChatPage(QWidget):
 
         self.handle_delete_friend(user_name)
 
-    def handle_add_friend(self, user_name):  # TODO 处理对方添加你为好友的情况
+    def handle_add_friend(self, user_name):
         for i in range(self.friend_list.count()):  # 遍历好友列表
             if self.friend_list.item(i).text() == user_name:
                 return
@@ -601,7 +607,7 @@ class ChatPage(QWidget):
         self.friend_list.addItem(user_name)
         self.chat_pages.addWidget(chat)
 
-    def handle_delete_friend(self, user_name):  # TODO 处理对方删除你的情况
+    def handle_delete_friend(self, user_name):
 
         index = self.chat_pages.findChild(QWidget, user_name)
         self.chat_pages.removeWidget(index)
@@ -638,11 +644,11 @@ class ChatPage(QWidget):
         self.parent.connection.send_message(message_packet)
         self.display_message(message, friend_name)
 
-        # editor.clear() # 清空编辑框 # TEST
+        editor.clear()  # 清空编辑框
 
     def display_message(self, message, target=None):
         chat = self.chat_pages.findChild(QWidget, target)
-        if chat is None:  # MARK 如果不是好友，不做处理
+        if chat is None:
             return
 
         displayer = chat.findChild(QTextEdit, 'MessageDisplayer')
@@ -681,7 +687,7 @@ class ChatPage(QWidget):
 
         QMessageBox.information(self, "Success", "File sent successfully.")
 
-    def receive_file(self, file_name, sender):  # TODO 接收文件
+    def receive_file(self, file_name, sender):
         self.__change_selected_friend(self.friend_list.findItems(sender, Qt.MatchExactly)[0])
 
         self.display_message(f"{sender} sent you a file: {file_name}.", sender)
@@ -737,13 +743,6 @@ def debug_func(client):
     client.show_chat_page()
     client.setWindowTitle(username)
 
-    # num = 0 # TEST
-    # if args[1] == '1':
-    #     num = 2
-    # else:
-    #     num = 1
-    # client.chat_page.handle_add_friend('user' + str(num))
-
 
 if __name__ == '__main__':
     config_logging()
@@ -761,4 +760,3 @@ if __name__ == '__main__':
 
 # TODO
 # Chat_Connection类中不使用response_cache，而是收到response时直接调用Client相关函数进行处理
-# 文件传输的逻辑参照client_no_ui设计

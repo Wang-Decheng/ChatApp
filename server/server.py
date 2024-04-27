@@ -136,7 +136,7 @@ class MessageHandler:
                 case 'login':
                     response = self.handle_login(message['request_data'], message['timestamp'], client_socket)
                 case 'logout':
-                    response = self.handle_logout(message['request_data'], message['timestamp'])
+                    response = self.handle_logout(message)
                 case 'register':
                     response = self.handle_register(message['request_data'], message['timestamp'])
                 case 'delete_account':
