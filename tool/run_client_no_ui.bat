@@ -15,7 +15,7 @@ timeout /t 2 >nul
 rem Start the client
 rem start pythonw /chatapp/client.py
 start cmd /k python ./tool/client_no_ui.py 1
-timeout /t 1 >nul
+timeout /t 2 >nul
 start cmd /k python ./tool/client_no_ui.py 2
 
 rem Wait for the user to press any key before closing the window
