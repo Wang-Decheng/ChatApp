@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog, QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QThread
 import socket
 import json
 import os
@@ -11,6 +11,7 @@ import queue
 from datetime import datetime
 import struct
 import pickle
+import inspect
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -71,7 +72,6 @@ class ChatConnection:
                 message = json.loads(message_json)
                 # message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
                 # message_bytes = self.server_socket.recv(message_length)
-                logging.info(f"Received message: {message}")
 
                 last_heartbeat_time = datetime.now()
                 message_type = message.get('type')
@@ -88,8 +88,8 @@ class ChatConnection:
                 self.disconnect()
             except json.JSONDecodeError:
                 logging.error("Error decoding JSON message")
-            except KeyError as e:
-                logging.error(f"Missing key in message: {e}")
+            # except KeyError as e:
+            #     logging.error(f"Missing key in message: {e}")
 
     def handle_message(self, message):  # TODO 收到消息后在此进行处理
         if message.get('action') is not None:  # 对数据进行拆包
@@ -104,7 +104,8 @@ class ChatConnection:
             string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
             self.parent.chat_page.display_message(string, sender)
 
-        if message.get('type') == None:  # TODO 处理文件传输头
+        if message.get('type') == 'file_transfer':  # TODO 处理文件传输头
+            self.parent.chat_page.receive_file(message.get('file_name'), message.get('sender'))
             pass
 
     def send_message(self, message):
@@ -367,6 +368,12 @@ class DeletePage(QWidget):
             response = self.parent.get_response(timestamp)
             if self.parent.show_response(response):
                 self.parent.show_main_page()
+
+
+class FileTransferThread(QThread):
+    finished = pyqtSignal()
+
+    pass
 
 
 class ChatPage(QWidget):
@@ -645,10 +652,51 @@ class ChatPage(QWidget):
         # self.__update_friend_status()
 
     def send_file(self):  # TODO 使用QThread发送、接收文件，完毕后弹窗
-        pass
+        if self.current_friend is None:
+            QMessageBox.critical(self, "Error", "Please select a friend to send file.")
+            return
 
-    def receive_file(self):  # TODO 接收文件
-        pass
+        file_path, _ = QFileDialog.getOpenFileName(self, "文件选择", "", "All Files (*)")
+        if not file_path:
+            return
+
+        sender = CurrentUser.get_username()
+        receiver = self.current_friend
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+
+        message = mb.build_send_file_request(sender, receiver, file_name, file_size)
+        self.parent.connection.send_message(message)
+        time.sleep(1)
+
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect(('127.0.0.1', 9998))
+        with open(file_path, 'rb') as fp:
+            while True:
+                data = fp.read(1024)
+                if not data:
+                    break
+                client_socket.send(data)
+        client_socket.close()
+
+        QMessageBox.information(self, "Success", "File sent successfully.")
+
+    def receive_file(self, file_name, sender):  # TODO 接收文件
+        self.__change_selected_friend(self.friend_list.findItems(sender, Qt.MatchExactly)[0])
+
+        self.display_message(f"{sender} sent you a file: {file_name}.", sender)
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect(('127.0.0.1', 9998))
+        file_path = os.path.dirname(__file__)
+        with open(file_path + '/' + file_name, 'wb') as fp:
+            while True:
+                data = client_socket.recv(1024)
+                if not data:
+                    break
+                fp.write(data)
+        client_socket.close()
+
+        self.display_message(f"File received successfully.", sender)
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):

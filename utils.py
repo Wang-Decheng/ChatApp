@@ -67,12 +67,12 @@ class MessageBuilder:
             'data': data
         }
         return message_data
+
+    @staticmethod
     def build_get_friends_response_data(friends):
-        response_data = {
-            'type': 'friends',
-            'friends': friends
-        }
+        response_data = {'type': 'friends', 'friends': friends}
         return response_data
+
     # 生成心跳包
     @staticmethod
     def build_heartbeat(who):
@@ -96,7 +96,8 @@ class MessageBuilder:
     def build_login_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.build_request('login', request_data)
-    
+
+    @staticmethod
     def build_logout_request(username):
         request_data = {'username': username}
         return MessageBuilder.build_request('logout', request_data)
@@ -110,20 +111,20 @@ class MessageBuilder:
     def build_delete_account_request(username, password):
         request_data = {'username': username, 'password': password}
         return MessageBuilder.build_request('delete_account', request_data)
-    
+
     @staticmethod
     def build_add_friend_request(username, friend):
-        request_data = {'username': username,'friend': friend}
+        request_data = {'username': username, 'friend': friend}
         return MessageBuilder.build_request('add_friend', request_data)
-    
+
     @staticmethod
     def build_get_friends_request(username):
         request_data = {'username': username}
         return MessageBuilder.build_request('get_friends', request_data)
-    
+
     @staticmethod
     def build_remove_friend_request(username, friend):
-        request_data = {'username': username,'friend': friend}
+        request_data = {'username': username, 'friend': friend}
         return MessageBuilder.build_request('remove_friend', request_data)
 
     @staticmethod
@@ -148,8 +149,12 @@ class MessageBuilder:
         }
         return MessageBuilder.build_request('send_group_messager', message_data)
 
-    def build_send_file_request(sender, receiver, file_name, file_size, timestamp = time.time(), chunk_size = 1024):
+    @staticmethod
+    def build_send_file_request(
+        sender, receiver, file_name, file_size, timestamp=time.time(), chunk_size=1024
+    ):
         request_data = {
+            'type': 'file_transfer',
             'sender': sender,
             'receiver': receiver,
             'file_name': file_name,
@@ -158,5 +163,5 @@ class MessageBuilder:
             'timestamp': timestamp
         }
         return MessageBuilder.build_request('file_transfer', request_data)
-    
+
     # endregion
