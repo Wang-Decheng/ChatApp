@@ -12,6 +12,7 @@ sys.path.append(".")
 from utils import MessageBuilder as mb
 import user_manager as usermanager
 
+
 class Manager:
     _instance = None
     _lock = threading.Lock()
@@ -22,7 +23,7 @@ class Manager:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         self.file_transfer_server = FileTransferServer(self)
         self.user_manager = usermanager.UserManager()
@@ -30,7 +31,9 @@ class Manager:
         self.message_server = MessageServer(manager_instance=self)
         self.message_server.start()
 
+
 class MessageServer:
+
     def __init__(self, manager_instance):
         config = Config()
         self.host = config.host
@@ -40,7 +43,6 @@ class MessageServer:
         self.manager_instace = manager_instance
         self.user_manager = manager_instance.user_manager
         self.messagehandler = manager_instance.messagehandler
-        
 
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(self.socket_timeout)
@@ -113,7 +115,8 @@ class MessageServer:
             logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
             client_handler = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
             client_handler.start()
-        
+
+
 class MessageHandler:
 
     def __init__(self, manager_instance):
@@ -122,7 +125,7 @@ class MessageHandler:
         self.file_transfer_server = self.manager_instance.file_transfer_server
         self.message_queues = {}
         config = Config()
-        self.file_transfer_interval =  config.file_transfer_interval
+        self.file_transfer_interval = config.file_transfer_interval
 
     def handle_message(self, message, client_socket):
         type = message['type']
@@ -133,13 +136,15 @@ class MessageHandler:
                 case 'login':
                     response = self.handle_login(message['request_data'], message['timestamp'], client_socket)
                 case 'logout':
-                    response = self.handle_logout(message['request_data'], message['timestamp'])
+                    response = self.handle_logout(message)
                 case 'register':
                     response = self.handle_register(message['request_data'], message['timestamp'])
                 case 'delete_account':
                     response = self.handle_delete_account(message['request_data'], message['timestamp'])
                 case 'send_personal_message':
-                    response = self.handle_send_personal_message(message['request_data'], message['timestamp'])
+                    response = self.handle_send_personal_message(
+                        message['request_data'], message['timestamp']
+                    )
                 case 'add_friend':
                     response = self.handle_add_friend(message['request_data'], message['timestamp'])
                 case 'get_friends':
@@ -150,7 +155,7 @@ class MessageHandler:
                     response = self.handle_file_transfer(message['request_data'], message['timestamp'])
         if response:
             MessageServer.send_message(client_socket, response)
-    
+
     def send_offline_messages(self, username, client_socket):
         if self.message_queues.get(username):
             time.sleep(5)
@@ -162,7 +167,10 @@ class MessageHandler:
                 elif type == 'file':
                     request_data = message['data']
                     file_path = message['file_path']
-                    message = message = mb.build_send_file_request(request_data['sender'], request_data['receiver'], request_data['file_name'], request_data['file_size'], request_data['timestamp'], request_data['chunk_size'])
+                    message = mb.build_send_file_request(
+                        request_data['sender'], request_data['receiver'], request_data['file_name'],
+                        request_data['file_size'], request_data['timestamp'], request_data['chunk_size']
+                    )
                     self.manager_instance.message_server.send_message(client_socket, message)
                     time.sleep(0.3)
                     self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
@@ -204,17 +212,21 @@ class MessageHandler:
             success = MessageServer.send_message(receiver_client, request_data)
             if success: response_text = 'send success'
         else:
-            offline_message = {'type' : 'personal_message', 'data' : request_data, 'timestamp': request_timestamp}
+            offline_message = {
+                'type': 'personal_message',
+                'data': request_data,
+                'timestamp': request_timestamp
+            }
             self.message_queues.setdefault(receiver, []).append(offline_message)
             success, response_text = True, 'Receiver is not Online, message will be sent when receiver is online'
         return mb.build_response(success, response_text, request_timestamp)
-    
+
     def handle_add_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
         friend = request_data.get('friend')
         success, response_text = self.user_manager.add_friend(username, friend)
         return mb.build_response(success, response_text, request_timestamp)
-    
+
     def handle_get_friends(self, request_data, request_timestamp):
         username = request_data.get('username')
         success, response_text, response_data = self.user_manager.get_friends(username)
@@ -223,7 +235,7 @@ class MessageHandler:
             status = self.user_manager.is_online(user)
             user_status_dict[user] = status
         return mb.build_response(success, response_text, request_timestamp, user_status_dict)
-    
+
     def handle_remove_friend(self, request_data, request_timestamp):
         username = request_data.get('username')
         friend = request_data.get('friend')
@@ -244,9 +256,11 @@ class MessageHandler:
             return mb.build_response(False, 'File transfer failed', request_timestamp)
         if self.user_manager.is_online(receiver):
             receiver_client = self.user_manager.get_socket(receiver)
-            message = message = mb.build_send_file_request(request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size)
+            message = mb.build_send_file_request(
+                request_data['sender'], receiver, file_name, file_size, request_data['timestamp'], chunk_size
+            )
             self.manager_instance.message_server.send_message(receiver_client, message)
-            time.sleep(0.3)
+            time.sleep(0.5)
             success = self.file_transfer_server.send_file(file_path, chunk_size)
             if success:
                 response_text = 'File transfer success'
@@ -254,18 +268,28 @@ class MessageHandler:
                 response_text = 'File transfer failed'
             return mb.build_response(success, response_text, request_timestamp)
         else:
-            offline_message = {'type': 'file', 'data' : request_data, 'timestamp': request_timestamp, 'file_path': file_path}
+            offline_message = {
+                'type': 'file',
+                'data': request_data,
+                'timestamp': request_timestamp,
+                'file_path': file_path
+            }
             self.message_queues.setdefault(receiver, []).append(offline_message)
-            return mb.build_response(True, 'Receiver is not Online, file will be transfered when receiver is online', request_timestamp)
+            return mb.build_response(
+                True, 'Receiver is not Online, file will be transfered when receiver is online',
+                request_timestamp
+            )
+
 
 class FileTransferServer:
+
     def __init__(self, manager_instance):
         configparser = Config()
         self.host = configparser.host
         self.port = configparser.file_transfer_port
         self.manager_instance = manager_instance
 
-    def receive_file(self, file_path ,chunk_size):
+    def receive_file(self, file_path, chunk_size):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.host, self.port))
         self.socket.listen(1)
@@ -281,8 +305,8 @@ class FileTransferServer:
         self.socket.close()
         logging.info(f"File {file_path} received")
         return True
-    
-    def send_file(self, file_path, chunk_size = 1024):
+
+    def send_file(self, file_path, chunk_size=1024):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.host, self.port))
         self.socket.listen(1)
@@ -298,6 +322,7 @@ class FileTransferServer:
         logging.info(f"File {file_path} sent")
         return True
 
+
 class Config:
     _instance = None
     _lock = threading.Lock()
@@ -308,6 +333,7 @@ class Config:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
+
     def __init__(self, config_file='./server/config.ini'):
         self.config = configparser.ConfigParser()
         self.config.read(config_file)
@@ -325,10 +351,11 @@ class Config:
         self.is_json_format = self.config['Logger']['is_json_format']
         self.log_file = self.config['Logger']['log_file']
 
+
 class ColoredFormatter(logging.Formatter):
     COLORS = {
         'DEBUG': '\033[92m',  # 绿色
-        'INFO': '\033[94m',   # 蓝色
+        'INFO': '\033[94m',  # 蓝色
         'WARNING': '\033[93m',  # 黄色
         'ERROR': '\033[91m',  # 红色
         'CRITICAL': '\033[91m'  # 红色
@@ -341,6 +368,7 @@ class ColoredFormatter(logging.Formatter):
         log_msg = log_msg.replace('$LOG_COLOR', loglevel_color)
         log_msg = log_msg.replace('$RESET', self.RESET)
         return log_msg
+
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - $LOG_COLOR%(levelname)s$RESET - %(message)s'):
     logger = logging.getLogger()
