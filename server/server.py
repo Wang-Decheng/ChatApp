@@ -48,9 +48,15 @@ class MessageServer:
         username = None
         while True:
             try:
+                config = Config()
+                is_json_format = config.is_json_format
                 message_json = client_socket.recv(1024).decode('utf-8')
-                logging.debug("server receive message:" + message_json)
                 message = json.loads(message_json)
+                formatted_json = json.dumps(message, indent=2)
+                if is_json_format == 'True':
+                    logging.debug(f"[Received Message]: {formatted_json}")
+                else:
+                    logging.debug(f"[Received Message]: {message_json}")
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -87,8 +93,14 @@ class MessageServer:
     def send_message(client_socket, message):
         if message is None:
             return
+        config = Config()
+        is_json_format = config.is_json_format
         message_json = json.dumps(message)
-        logging.debug("Send message:" + message_json)
+        formatted_json = json.dumps(message, indent=2)
+        if is_json_format == 'True':
+            logging.debug(f"[Send Message]: {formatted_json}")
+        else:
+            logging.debug(f"[Send Message]: {message_json}")
         return client_socket.send(message_json.encode('utf-8'))
 
     def start(self):
@@ -96,7 +108,6 @@ class MessageServer:
         server_socket.bind((self.host, self.port))
         server_socket.listen(5)
         logging.info(f"Server started on {self.host}:{self.port}")
-
         while True:
             client_socket, client_address = server_socket.accept()
             logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
@@ -149,15 +160,12 @@ class MessageHandler:
                     MessageServer.send_message(client_socket, personal_message)
                 elif type == 'file':
                     request_data = message['data']
-                    file_path = request_data['file_path']
+                    file_path = message['file_path']
                     message = message = mb.build_send_file_request(request_data['sender'], request_data['receiver'], request_data['file_name'], request_data['file_size'], request_data['timestamp'], request_data['chunk_size'])
                     self.manager_instance.message_server.send_message(client_socket, message)
                     time.sleep(0.3)
-                    success = self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
-                    if success:
-                        response_text = 'File transfer success'
-                    else:
-                        response_text = 'File transfer failed'
+                    self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
+                time.sleep(0.3)
 
     def handle_login(self, request_data, request_timestamp, client_socket):
         username = request_data.get('username')
@@ -165,7 +173,7 @@ class MessageHandler:
         success, response_text = self.user_manager.login_user(username, password)
         if success:
             self.user_manager.set_online(username, client_socket)
-        logging.debug(self.user_manager.is_online(username))
+        self.send_offline_messages(username, client_socket)
         return mb.build_response(success, response_text, request_timestamp)
 
     def handle_logout(self, message):
@@ -313,22 +321,45 @@ class Config:
         self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
         self.socket_timeout = int(self.config['Server']['socket_timeout'])
         self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
+        self.is_json_format = self.config['Logger']['is_json_format']
+        self.log_file = self.config['Logger']['log_file']
 
-def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
+class ColoredFormatter(logging.Formatter):
+    COLORS = {
+        'DEBUG': '\033[92m',  # 绿色
+        'INFO': '\033[94m',   # 蓝色
+        'WARNING': '\033[93m',  # 黄色
+        'ERROR': '\033[91m',  # 红色
+        'CRITICAL': '\033[91m'  # 红色
+    }
+    RESET = '\033[0m'
+
+    def format(self, record):
+        loglevel_color = self.COLORS.get(record.levelname, self.RESET)
+        log_msg = super(ColoredFormatter, self).format(record)
+        log_msg = log_msg.replace('$LOG_COLOR', loglevel_color)
+        log_msg = log_msg.replace('$RESET', self.RESET)
+        return log_msg
+
+def config_logging(level=logging.DEBUG, format='%(asctime)s - $LOG_COLOR%(levelname)s$RESET - %(message)s'):
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     if not logger.handlers:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(format)
+
+        formatter = ColoredFormatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        file_handler = logging.FileHandler('server.log')
+        config = Config()
+        log_file = config.log_file
+        file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         logger.addHandler(file_handler)
+
 
 if __name__ == '__main__':
     config_logging()
