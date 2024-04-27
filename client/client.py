@@ -71,16 +71,14 @@ class ChatConnection:
                 message = json.loads(message_json)
                 # message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
                 # message_bytes = self.server_socket.recv(message_length)
-                # message = pickle.loads(message_bytes)
-                if message['type'] != 'file_data':
-                    logging.info(f"Received message: {message}")
+                logging.info(f"Received message: {message}")
 
                 last_heartbeat_time = datetime.now()
                 message_type = message.get('type')
                 if message_type == 'heartbeat':
                     logging.debug("Received heartbeat from server")
                 elif message_type == 'response':
-                    self.response_cache = message
+                    self.response_cache = message  # FIXME
                 else:
                     self.handle_message(message)
             except socket.timeout:
@@ -94,6 +92,9 @@ class ChatConnection:
                 logging.error(f"Missing key in message: {e}")
 
     def handle_message(self, message):  # TODO 收到消息后在此进行处理
+        if message.get('action') is not None:  # 对数据进行拆包
+            message = message['request_data']
+
         if message['type'] == 'personal_message':
             sender = message['sender']
             content = message['content']
@@ -103,20 +104,7 @@ class ChatConnection:
             string = f"[{formatted_timestamp}]{sender}->You:\n{content}"
             self.parent.chat_page.display_message(string, sender)
 
-        if message['type'] == 'file_tranfer_header':
-            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
-            with open(file_path, 'wb') as fp:
-                pass
-
-            self.parent.chat_page.display_message(
-                message['file_name'] + ' ' + str(message['file_size'])
-            )  # test 输出传输文件信息
-
-        if message['type'] == 'file_data':
-            file_path = os.path.dirname(__file__) + '\\' + message['file_name']
-            with open(file_path, 'ab') as fp:
-                data = message['file_content']
-                fp.write(data)
+        if message.get('type') == None:  # TODO 处理文件传输头
             pass
 
     def send_message(self, message):
@@ -408,7 +396,7 @@ class ChatPage(QWidget):
         V_layout.addWidget(self.friend_list)
         layout.addLayout(V_layout)
         friend_list = ['None']
-        self.friend_list.addItems(friend_list)  # TEST
+        self.friend_list.addItems(friend_list)
         self.friend_list.setFixedWidth(150)
         self.friend_list.itemClicked.connect(self.__change_selected_friend)
         # layout.addWidget(self.friend_list)
@@ -724,5 +712,5 @@ if __name__ == '__main__':
     sys.exit(app.exec_())
 
 # TODO
-# 可以在页面上增加一个按钮，用来刷新好友状态
 # Chat_Connection类中不使用response_cache，而是收到response时直接调用Client相关函数进行处理
+# 文件传输的逻辑参照client_no_ui设计
