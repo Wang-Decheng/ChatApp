@@ -53,10 +53,10 @@ class MessageServer:
                 message_json = client_socket.recv(1024).decode('utf-8')
                 message = json.loads(message_json)
                 formatted_json = json.dumps(message, indent=2)
-                if is_json_format:
-                    logging.debug(f"Received message: {formatted_json}")
+                if is_json_format == 'True':
+                    logging.debug(f"[Received Message]: {formatted_json}")
                 else:
-                    logging.debug(f"Received message: {message}")
+                    logging.debug(f"[Received Message]: {message_json}")
                 last_heartbeat_time = datetime.now()
                 type = message['type']
                 if type == 'heartbeat':
@@ -97,10 +97,10 @@ class MessageServer:
         is_json_format = config.is_json_format
         message_json = json.dumps(message)
         formatted_json = json.dumps(message, indent=2)
-        if is_json_format:
-            logging.debug(f"Send message: {formatted_json}")
+        if is_json_format == 'True':
+            logging.debug(f"[Send Message]: {formatted_json}")
         else:
-            logging.debug(f"Send message: {message}")
+            logging.debug(f"[Send Message]: {message_json}")
         return client_socket.send(message_json.encode('utf-8'))
 
     def start(self):
@@ -108,7 +108,6 @@ class MessageServer:
         server_socket.bind((self.host, self.port))
         server_socket.listen(5)
         logging.info(f"Server started on {self.host}:{self.port}")
-
         while True:
             client_socket, client_address = server_socket.accept()
             logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
