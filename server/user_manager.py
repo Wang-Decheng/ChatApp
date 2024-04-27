@@ -114,7 +114,6 @@ class UserManager:
     
     def remove_friend(self, username, friend_username):
         is_exists = self.is_username_exist(username)
-        logging.debug(f'[ATTENTION]friend_username: {friend_username}, is_exists: {is_exists}')
         if not is_exists:
             return False, 'User is not exist'
         self.cursor.execute('DELETE FROM friendship WHERE username = ? AND friendname = ?', (username, friend_username))
