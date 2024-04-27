@@ -165,6 +165,7 @@ class MessageHandler:
                     self.manager_instance.message_server.send_message(client_socket, message)
                     time.sleep(0.3)
                     self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
+                time.sleep(0.3)
 
     def handle_login(self, request_data, request_timestamp, client_socket):
         username = request_data.get('username')
