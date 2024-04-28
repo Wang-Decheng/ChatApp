@@ -161,6 +161,7 @@ class ChatConnection:
         else: response = {'success':False, 'message': 'Can not send to yourself'}
         self.parent.show_response(response)
     def show_response(self, response):
+        if not response: return False
         success = 'sccess' if response['success']  else 'failure'
         print(f"[Response]{success}: {response['message']}")
         return response['success']
@@ -173,35 +174,6 @@ class ChatConnection:
         time.sleep(0.3)
         if file_transfer_client.send_file(file_path):
             print(f"File {file_name} sent successfully.")
-
-def debug_login_as(connection, username):
-    password = '123'
-    message = mb.build_register_request(username, password)
-    connection.send_message(message)
-    time.sleep(0.3)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
-    message = mb.build_login_request(username, password)
-    connection.send_message(message)
-    time.sleep(0.3)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
-    CurrentUser.set_username(username)
-
-def debug_add_friend(connection, friend):
-    username = CurrentUser.get_username()
-    message = mb.build_add_friend_request(username, friend)
-    connection.send_message(message)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
-
-def debug_get_friends():
-    username = CurrentUser.get_username()
-    message = mb.build_get_friends_request(username)
-    connection.send_message(message)
-    response = connection.get_response(message['timestamp'])
-    connection.show_response(response)
-    print(response['data'])
 
 class FileTransferClient:
 
@@ -234,9 +206,38 @@ class FileTransferClient:
         print(f"File {file_path} received successfully.")
         return True
 
+def debug_login_as(connection, username):
+    password = '123'
+    message = mb.build_register_request(username, password)
+    connection.send_message(message)
+    time.sleep(0.3)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    message = mb.build_login_request(username, password)
+    connection.send_message(message)
+    time.sleep(0.3)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    CurrentUser.set_username(username)
+
+def debug_add_friend(connection, friend):
+    username = CurrentUser.get_username()
+    message = mb.build_add_friend_request(username, friend)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+
+def debug_get_friends():
+    username = CurrentUser.get_username()
+    message = mb.build_get_friends_request(username)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
+    print(response['data'])
+
 def debug_send_file(reciver):
     username = CurrentUser.get_username()
-    file_path = './wdc_debug/large_file.bin'
+    file_path = 'large_file.bin'
     # file_path = './wdc_debug/test.txt'
     connection.send_file(username, reciver, file_path)
 
@@ -246,19 +247,23 @@ def debug_remove_friend(connection, friend):
     connection.send_message(message)
     response = connection.get_response(message['timestamp'])
     connection.show_response(response)
+    
+def debug_send_message(connection, username, message):
+    message = mb.build_send_personal_message_request(CurrentUser.get_username(), username, message)
+    connection.send_message(message)
+    response = connection.get_response(message['timestamp'])
+    connection.show_response(response)
 
 if __name__ == '__main__':
     ip_address = '127.0.0.1'
+    if sys.argv[1] == '2':
+        time.sleep(15)
     connection = ChatConnection(ip_address, 9999)
     file_transfer_client = FileTransferClient(ip_address, 9998)
     connection.start_connect()
     username = 'user' + sys.argv[1]
     debug_login_as(connection, username)
     if sys.argv[1] == '1':
-        debug_add_friend(connection, 'user2')
-        time.sleep(0.5)
-        debug_get_friends()
-        time.sleep(0.5)
-        debug_remove_friend(connection, 'user2')
-        time.sleep(0.5)
-        debug_get_friends()
+        time.sleep(1)
+        debug_send_file('user2')
+        debug_send_message(connection, 'user2', 'Hello user2')
