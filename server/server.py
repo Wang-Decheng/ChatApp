@@ -176,7 +176,6 @@ class MessageHandler:
                     self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
                 time.sleep(0.3)
             self.message_queues.pop(username)
-            
 
     def handle_login(self, request_data, request_timestamp, client_socket):
         username = request_data.get('username')
@@ -336,7 +335,7 @@ class Config:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, config_file='./server/config.ini'):
+    def __init__(self, config_file='./config.ini'):
         self.config = configparser.ConfigParser()
         self.config.read(config_file)
         if os.environ.get('LOCAL'):

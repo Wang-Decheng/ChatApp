@@ -9,11 +9,8 @@ import logging
 import time
 import queue
 from datetime import datetime
-import struct
-import pickle
-import inspect
 import concurrent.futures
-
+import configparser
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -136,7 +133,7 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit = 5):  # FIXME
+    def get_response(self, request_timestamp, timelimit=5):  # FIXME
         start_time = time.time()
         while True:
             time.sleep(0.2)
@@ -144,6 +141,7 @@ class ChatConnection:
             if self.response_cache['timestamp'] == request_timestamp: return self.response_cache
             if (time.time() - start_time > timelimit): break
         return False
+
 
 class ChatClient(QMainWindow):
     response_signal = pyqtSignal(dict)  # MARK
@@ -675,10 +673,10 @@ class ChatPage(QWidget):
         time.sleep(1)
 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(('127.0.0.1', 9998))
+        client_socket.connect((config.host, config.file_transfer_port))
         with open(file_path, 'rb') as fp:
             while True:
-                data = fp.read(1024)
+                data = fp.read(config.default_chunk_size)
                 if not data:
                     break
                 client_socket.send(data)
@@ -691,17 +689,49 @@ class ChatPage(QWidget):
 
         self.display_message(f"{sender} sent you a file: {file_name}.", sender)
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(('127.0.0.1', 9998))
+        client_socket.connect((config.host, config.file_transfer_port))
         file_path = os.path.dirname(__file__)
         with open(file_path + '/' + file_name, 'wb') as fp:
             while True:
-                data = client_socket.recv(1024)
+                data = client_socket.recv(config.default_chunk_size)
                 if not data:
                     break
                 fp.write(data)
         client_socket.close()
 
         self.display_message(f"File received successfully.", sender)
+
+
+class Config():
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, config_file='./config.ini'):
+        self.config = configparser.ConfigParser()
+        self.config.read(config_file)
+
+        if os.environ.get('LOCAL') == 'True':
+            self.host = self.config['Local']['host']
+            self.message_port = int(self.config['Local']['message_port'])
+            self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
+        else:
+            self.host = self.config['Remote']['host']
+            self.message_port = int(self.config['Remote']['message_port'])
+            self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
+        self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
+        self.socket_timeout = int(self.config['Server']['socket_timeout'])
+        self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
+        self.default_chunk_size = int(self.config['Server']['default_chunk_size'])
+
+
+config = Config()
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
@@ -715,7 +745,7 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         logger.addHandler(console_handler)
 
         args = sys.argv
-        if len(args) >= 1:
+        if len(args) > 1:
             logfilename = args[1] + '-debug.log'
         else:
             logfilename = 'c-debug.log'
@@ -745,13 +775,13 @@ def debug_func(client):
 
 if __name__ == '__main__':
     config_logging()
-    if os.environ.get('LOCAL') == 'True':
-        ip_address = '127.0.0.1'
-    else:
-        domain_name = "wdc.zone"
-        ip_address = socket.gethostbyname(domain_name)
+    # if os.environ.get('LOCAL') == 'True':
+    #     ip_address = '127.0.0.1'
+    # else:
+    #     domain_name = "wdc.zone"
+    #     ip_address = socket.gethostbyname(domain_name)
     app = QApplication(sys.argv)
-    client = ChatClient(ip_address, 9999)
+    client = ChatClient(config.host, config.message_port)
     client.show()
     if os.environ.get('DEBUG') == 'True':
         debug_func(client)
