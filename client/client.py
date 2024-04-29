@@ -65,22 +65,23 @@ class ChatConnection:
     def handle_server(self):
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
+        config = Config()
+        default_chunk_size = config.default_chunk_size
         while True:
             try:
-                message_json = self.server_socket.recv(1024).decode('utf-8')
-                logging.info(f"Received message: {message_json}")
-                message = json.loads(message_json)
-                # message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
-                # message_bytes = self.server_socket.recv(message_length)
-
-                last_heartbeat_time = datetime.now()
-                message_type = message.get('type')
-                if message_type == 'heartbeat':
-                    logging.debug("Received heartbeat from server")
-                elif message_type == 'response':
-                    self.response_cache = message  # FIXME
-                else:
-                    self.handle_message(message)
+                json_data = self.server_socket.recv(10 * default_chunk_size).decode('utf-8')
+                message_json_list = json_data.split('!@#')
+                for message_json in message_json_list[:-1]: #忽略最后的空包
+                    logging.info(f"Received message: {message_json}")
+                    message = json.loads(message_json)
+                    last_heartbeat_time = datetime.now()
+                    message_type = message.get('type')
+                    if message_type == 'heartbeat':
+                        logging.debug("Received heartbeat from server")
+                    elif message_type == 'response':
+                        self.response_cache = message  # FIXME
+                    else:
+                        self.handle_message(message)
             except socket.timeout:
                 logging.debug("Socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
@@ -117,6 +118,7 @@ class ChatConnection:
             try:
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
+                message_json = message_json + '!@#'
                 self.server_socket.send(message_json.encode('utf-8'))
                 # message_bytes = pickle.dumps(message)
                 # self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
@@ -766,7 +768,10 @@ def debug_func(client):
     register_msg = mb.build_register_request(username, password)
     login_msg = mb.build_login_request(username, password)
     connection.send_message(register_msg)
-    time.sleep(1)
+    connection.send_message(register_msg)
+    connection.send_message(register_msg)
+    connection.send_message(register_msg)
+    connection.send_message(register_msg)
     connection.send_message(login_msg)
     CurrentUser.set_username(username)
     client.show_chat_page()
