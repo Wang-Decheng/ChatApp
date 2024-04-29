@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 import socket
 import json
@@ -90,6 +90,8 @@ class ChatConnection:
                 logging.error("Error decoding JSON message")
             except KeyError as e:
                 logging.error(f"Missing key in message: {e}")
+            except Exception as e:
+                logging.error(str(e))
 
     def handle_message(self, message):  # TODO 收到消息后在此进行处理
         if message.get('action') is not None:  # 对数据进行拆包
@@ -722,16 +724,14 @@ class Config():
             self.message_port = int(self.config['Local']['message_port'])
             self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
         else:
-            self.host = self.config['Remote']['host']
+            domain_name = self.config['Remote']['domain']
+            self.host = socket.gethostbyname(domain_name)
             self.message_port = int(self.config['Remote']['message_port'])
             self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
         self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
         self.socket_timeout = int(self.config['Server']['socket_timeout'])
         self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
         self.default_chunk_size = int(self.config['Server']['default_chunk_size'])
-
-
-config = Config()
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
@@ -774,11 +774,12 @@ def debug_func(client):
 
 
 if __name__ == '__main__':
+    config = Config()
     config_logging()
     # if os.environ.get('LOCAL') == 'True':
-    #     ip_address = '127.0.0.1'
+    #     ip_address = config.host
     # else:
-    #     domain_name = "wdc.zone"
+    #     domain_name = 'ecs.wdc.zone'
     #     ip_address = socket.gethostbyname(domain_name)
     app = QApplication(sys.argv)
     client = ChatClient(config.host, config.message_port)
