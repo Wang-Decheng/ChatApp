@@ -90,6 +90,8 @@ class MessageServer:
                 logging.info(f"Connection with {client_address} is closed.")
                 client_socket.close()
                 break
+            except Exception as e:
+                logging.error(str(e))
 
     @staticmethod
     def send_message(client_socket, message):
@@ -352,6 +354,7 @@ class Config:
         self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
         self.is_json_format = self.config['Logger']['is_json_format']
         self.log_file = self.config['Logger']['log_file']
+        self.is_output_heartbeat = self.config['Logger']['is_output_heartbeat']
 
 
 class ColoredFormatter(logging.Formatter):
@@ -375,17 +378,29 @@ class ColoredFormatter(logging.Formatter):
 def config_logging(level=logging.DEBUG, format='%(asctime)s - $LOG_COLOR%(levelname)s$RESET - %(message)s'):
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
+    class CustomFilter(logging.Filter):
+        def __init__(self, word):
+            super().__init__()
+            self.word = word
+        def filter(self, record):
+            if self.word in record.getMessage():
+                return False
+            else:
+                return True
 
     if not logger.handlers:
+        config = Config()
+        log_file = config.log_file
+        is_output_heartbeat = config.is_output_heartbeat
         console_handler = logging.StreamHandler()
+        custom_filter = CustomFilter('hearbeat')
+        if is_output_heartbeat != 'True':
+            console_handler.addFilter(custom_filter)
         console_handler.setLevel(logging.DEBUG)
-
         formatter = ColoredFormatter(format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-
-        config = Config()
-        log_file = config.log_file
+        
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
