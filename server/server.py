@@ -58,7 +58,6 @@ class MessageServer:
                 json_data = client_socket.recv(10 * default_chunk_size).decode('utf-8')
                 if not json_data:
                     raise ConnectionResetError
-                logging.debug(f"[Data Length]: {len(json_data)}")
                 message_json_list = json_data.split('!@#')
                 for message_json in message_json_list[:-1]:
                     message = json.loads(message_json)
