@@ -69,6 +69,9 @@ class ChatConnection:
         default_chunk_size = config.default_chunk_size
         while True:
             try:
+                if self.server_socket is None: 
+                    logging.warning("Server socket not connected")
+                    break
                 json_data = self.server_socket.recv(10 * default_chunk_size).decode('utf-8')
                 message_json_list = json_data.split('!@#')
                 for message_json in message_json_list[:-1]: #忽略最后的空包
@@ -116,6 +119,9 @@ class ChatConnection:
             self.start_connect()
         with self.lock:
             try:
+                if not self.server_socket: 
+                    logging.error("Server socket not connected")
+                    return
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
                 message_json = message_json + '!@#'
@@ -129,6 +135,7 @@ class ChatConnection:
     def send_heartbeat(self):
         while self.server_socket is not None:
             try:
+                if self.server_socket is None: break
                 username = CurrentUser.get_username()
                 if username is not None:
                     message = mb.build_heartbeat(username)
@@ -556,6 +563,7 @@ class ChatPage(QWidget):
 
     def __log_out(self):
         self.parent.connection.send_message(mb.build_logout_request(CurrentUser.get_username()))
+        self.parent.connection.disconnect()
         self.parent.show_main_page()
         pass
 
@@ -767,10 +775,6 @@ def debug_func(client):
     password = '123'
     register_msg = mb.build_register_request(username, password)
     login_msg = mb.build_login_request(username, password)
-    connection.send_message(register_msg)
-    connection.send_message(register_msg)
-    connection.send_message(register_msg)
-    connection.send_message(register_msg)
     connection.send_message(register_msg)
     connection.send_message(login_msg)
     CurrentUser.set_username(username)

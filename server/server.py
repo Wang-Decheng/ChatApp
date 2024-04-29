@@ -47,12 +47,14 @@ class MessageServer:
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(self.socket_timeout)
         last_heartbeat_time = datetime.now()
+        config = Config()
+        is_json_format = config.is_json_format
+        default_chunk_size = config.default_chunk_size
         username = None
         while True:
             try:
-                config = Config()
-                is_json_format = config.is_json_format
-                default_chunk_size = config.default_chunk_size
+                if client_socket is None:
+                    raise ConnectionResetError                
                 json_data = client_socket.recv(10 * default_chunk_size).decode('utf-8')
                 logging.debug(f"[Received Data]: {json_data}")
                 message_json_list = json_data.split('!@#')
