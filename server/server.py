@@ -355,11 +355,11 @@ class Config:
         self.config = configparser.ConfigParser()
         self.config.read(config_file)
         if os.environ.get('LOCAL'):
-            self.host = self.config['Local']['host']
+            self.host = self.config['Local']['server_host']
             self.message_port = int(self.config['Local']['message_port'])
             self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
         else:
-            self.host = self.config['Remote']['host']
+            self.host = self.config['Remote']['server_host']
             self.message_port = int(self.config['Remote']['message_port'])
             self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
         self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
