@@ -7,6 +7,7 @@ import logging
 import sys
 import time
 import configparser
+import concurrent.futures
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -153,9 +154,7 @@ class MessageHandler:
                 case 'delete_account':
                     response = self.handle_delete_account(message['request_data'], message['timestamp'])
                 case 'send_personal_message':
-                    response = self.handle_send_personal_message(
-                        message['request_data'], message['timestamp']
-                    )
+                    response = self.handle_send_personal_message(message['request_data'], message['timestamp'])
                 case 'add_friend':
                     response = self.handle_add_friend(message['request_data'], message['timestamp'])
                 case 'get_friends':
@@ -300,11 +299,21 @@ class FileTransferServer:
         self.host = configparser.host
         self.port = configparser.file_transfer_port
         self.manager_instance = manager_instance
-
-    def receive_file(self, file_path, chunk_size):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.host, self.port))
-        self.socket.listen(1)
+        self.socket.listen(5)
+    
+    def receive_file(self, file_path, chunk_size):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.__receive_file, file_path, chunk_size)
+            return future.result()
+
+    def send_file(self, file_path, chunk_size):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.__send_file, file_path, chunk_size)
+            return future.result()
+
+    def __receive_file(self, file_path, chunk_size):
         client_socket, client_address = self.socket.accept()
         logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'wb') as f:
@@ -314,14 +323,10 @@ class FileTransferServer:
                     break
                 f.write(data)
         client_socket.close()
-        self.socket.close()
         logging.info(f"File {file_path} received")
         return True
 
-    def send_file(self, file_path, chunk_size=1024):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(1)
+    def __send_file(self, file_path, chunk_size=1024):
         client_socket, client_address = self.socket.accept()
         logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'rb') as f:
