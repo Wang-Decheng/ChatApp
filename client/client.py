@@ -155,7 +155,7 @@ class ChatConnection:
 
 
 class ChatClient(QMainWindow):
-    response_signal = pyqtSignal(dict)  # MARK
+    response_signal = pyqtSignal(dict)  # MARK 未使用该信号量
 
     def __init__(self, host, port):
         super().__init__()
