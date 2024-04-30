@@ -69,12 +69,12 @@ class ChatConnection:
         default_chunk_size = config.default_chunk_size
         while True:
             try:
-                if self.server_socket is None: 
+                if self.server_socket is None:
                     logging.warning("Server socket not connected")
                     break
                 json_data = self.server_socket.recv(10 * default_chunk_size).decode('utf-8')
                 message_json_list = json_data.split('!@#')
-                for message_json in message_json_list[:-1]: #忽略最后的空包
+                for message_json in message_json_list[:-1]:  #忽略最后的空包
                     logging.info(f"Received message: {message_json}")
                     message = json.loads(message_json)
                     last_heartbeat_time = datetime.now()
@@ -119,7 +119,7 @@ class ChatConnection:
             self.start_connect()
         with self.lock:
             try:
-                if not self.server_socket: 
+                if not self.server_socket:
                     logging.error("Server socket not connected")
                     return
                 message_json = json.dumps(message)
@@ -155,7 +155,7 @@ class ChatConnection:
 
 
 class ChatClient(QMainWindow):
-    response_signal = pyqtSignal(dict)  # MARK
+    response_signal = pyqtSignal(dict)  # MARK 未使用该信号量
 
     def __init__(self, host, port):
         super().__init__()
@@ -511,8 +511,6 @@ class ChatPage(QWidget):
         return chat
 
     def __update_friend_status(self):
-        # XXX 由于使用多线程时无法运行，所以在调用display_message时更新好友列表
-
         # while True:
         update_friend_list_request = mb.build_get_friends_request(CurrentUser.get_username())
         self.parent.connection.send_message(update_friend_list_request)
@@ -684,6 +682,10 @@ class ChatPage(QWidget):
         self.parent.connection.send_message(message)
         time.sleep(1)
 
+        self.display_message(f"Start sending file: {file_name}.", self.current_friend)
+        threading.Thread(target=self.__send_file_subthread, args=(file_path, )).start()
+
+    def __send_file_subthread(self, file_path):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((config.host, config.file_transfer_port))
         with open(file_path, 'rb') as fp:
@@ -693,25 +695,26 @@ class ChatPage(QWidget):
                     break
                 client_socket.send(data)
         client_socket.close()
-
-        QMessageBox.information(self, "Success", "File sent successfully.")
+        self.display_message(f"File {os.path.basename(file_path)} sent successfully.", self.current_friend)
 
     def receive_file(self, file_name, sender):
         self.__change_selected_friend(self.friend_list.findItems(sender, Qt.MatchExactly)[0])
 
         self.display_message(f"{sender} sent you a file: {file_name}.", sender)
+        threading.Thread(target=self.__recv_file_subthread, args=(file_name, sender)).start()
+
+    def __recv_file_subthread(self, file_name, sender):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((config.host, config.file_transfer_port))
         file_path = os.path.dirname(__file__)
         with open(file_path + '/' + file_name, 'wb') as fp:
             while True:
-                data = client_socket.recv(config.default_chunk_size)
+                data = client_socket.recv(config.default_chunk_size)  # MARK 是否同样需要设置较大的缓冲区
                 if not data:
                     break
                 fp.write(data)
         client_socket.close()
-
-        self.display_message(f"File received successfully.", sender)
+        self.display_message(f"File {file_name} received successfully.", sender)
 
 
 class Config():
