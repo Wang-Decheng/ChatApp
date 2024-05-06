@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout, QWidget, QStackedWidget, QTextEdit, QHBoxLayout, QFileDialog, QListWidget, QInputDialog
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 import socket
 import json
@@ -9,11 +9,8 @@ import logging
 import time
 import queue
 from datetime import datetime
-import struct
-import pickle
-import inspect
 import concurrent.futures
-
+import configparser
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -68,22 +65,26 @@ class ChatConnection:
     def handle_server(self):
         last_heartbeat_time = datetime.now()
         self.server_socket.settimeout(15)
+        config = Config()
+        default_chunk_size = config.default_chunk_size
         while True:
             try:
-                message_json = self.server_socket.recv(1024).decode('utf-8')
-                logging.info(f"Received message: {message_json}")
-                message = json.loads(message_json)
-                # message_length = int.from_bytes(self.server_socket.recv(4), byteorder='big')
-                # message_bytes = self.server_socket.recv(message_length)
-
-                last_heartbeat_time = datetime.now()
-                message_type = message.get('type')
-                if message_type == 'heartbeat':
-                    logging.debug("Received heartbeat from server")
-                elif message_type == 'response':
-                    self.response_cache = message  # FIXME
-                else:
-                    self.handle_message(message)
+                if self.server_socket is None:
+                    logging.warning("Server socket not connected")
+                    break
+                json_data = self.server_socket.recv(10 * default_chunk_size).decode('utf-8')
+                message_json_list = json_data.split('!@#')
+                for message_json in message_json_list[:-1]:  #忽略最后的空包
+                    logging.info(f"Received message: {message_json}")
+                    message = json.loads(message_json)
+                    last_heartbeat_time = datetime.now()
+                    message_type = message.get('type')
+                    if message_type == 'heartbeat':
+                        logging.debug("Received heartbeat from server")
+                    elif message_type == 'response':
+                        self.response_cache = message  # FIXME
+                    else:
+                        self.handle_message(message)
             except socket.timeout:
                 logging.debug("Socket timeout")
                 if (datetime.now() - last_heartbeat_time).total_seconds() > self.timeout:
@@ -93,6 +94,8 @@ class ChatConnection:
                 logging.error("Error decoding JSON message")
             except KeyError as e:
                 logging.error(f"Missing key in message: {e}")
+            except Exception as e:
+                logging.error(str(e))
 
     def handle_message(self, message):  # TODO 收到消息后在此进行处理
         if message.get('action') is not None:  # 对数据进行拆包
@@ -116,8 +119,12 @@ class ChatConnection:
             self.start_connect()
         with self.lock:
             try:
+                if not self.server_socket:
+                    logging.error("Server socket not connected")
+                    return
                 message_json = json.dumps(message)
                 logging.info(f"Sending message: {message_json}")
+                message_json = message_json + '!@#'
                 self.server_socket.send(message_json.encode('utf-8'))
                 # message_bytes = pickle.dumps(message)
                 # self.server_socket.send(len(message_bytes).to_bytes(4, byteorder='big'))
@@ -128,6 +135,7 @@ class ChatConnection:
     def send_heartbeat(self):
         while self.server_socket is not None:
             try:
+                if self.server_socket is None: break
                 username = CurrentUser.get_username()
                 if username is not None:
                     message = mb.build_heartbeat(username)
@@ -136,7 +144,7 @@ class ChatConnection:
                 logging.error(f"Error sending heartbeat:{str(e)}")
             time.sleep(self.heartbeat_interval)
 
-    def get_response(self, request_timestamp, timelimit = 5):  # FIXME
+    def get_response(self, request_timestamp, timelimit=5):  # FIXME
         start_time = time.time()
         while True:
             time.sleep(0.2)
@@ -145,8 +153,9 @@ class ChatConnection:
             if (time.time() - start_time > timelimit): break
         return False
 
+
 class ChatClient(QMainWindow):
-    response_signal = pyqtSignal(dict)  # MARK
+    response_signal = pyqtSignal(dict)  # MARK 未使用该信号量
 
     def __init__(self, host, port):
         super().__init__()
@@ -502,8 +511,6 @@ class ChatPage(QWidget):
         return chat
 
     def __update_friend_status(self):
-        # XXX 由于使用多线程时无法运行，所以在调用display_message时更新好友列表
-
         # while True:
         update_friend_list_request = mb.build_get_friends_request(CurrentUser.get_username())
         self.parent.connection.send_message(update_friend_list_request)
@@ -554,6 +561,7 @@ class ChatPage(QWidget):
 
     def __log_out(self):
         self.parent.connection.send_message(mb.build_logout_request(CurrentUser.get_username()))
+        self.parent.connection.disconnect()
         self.parent.show_main_page()
         pass
 
@@ -674,34 +682,68 @@ class ChatPage(QWidget):
         self.parent.connection.send_message(message)
         time.sleep(1)
 
+        self.display_message(f"Start sending file: {file_name}.", self.current_friend)
+        threading.Thread(target=self.__send_file_subthread, args=(file_path, )).start()
+
+    def __send_file_subthread(self, file_path):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(('127.0.0.1', 9998))
+        client_socket.connect((config.host, config.file_transfer_port))
         with open(file_path, 'rb') as fp:
             while True:
-                data = fp.read(1024)
+                data = fp.read(config.default_chunk_size)
                 if not data:
                     break
                 client_socket.send(data)
         client_socket.close()
-
-        QMessageBox.information(self, "Success", "File sent successfully.")
+        self.display_message(f"File {os.path.basename(file_path)} sent successfully.", self.current_friend)
 
     def receive_file(self, file_name, sender):
         self.__change_selected_friend(self.friend_list.findItems(sender, Qt.MatchExactly)[0])
 
         self.display_message(f"{sender} sent you a file: {file_name}.", sender)
+        threading.Thread(target=self.__recv_file_subthread, args=(file_name, sender)).start()
+
+    def __recv_file_subthread(self, file_name, sender):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(('127.0.0.1', 9998))
+        client_socket.connect((config.host, config.file_transfer_port))
         file_path = os.path.dirname(__file__)
         with open(file_path + '/' + file_name, 'wb') as fp:
             while True:
-                data = client_socket.recv(1024)
+                data = client_socket.recv(config.default_chunk_size)  # MARK 是否同样需要设置较大的缓冲区
                 if not data:
                     break
                 fp.write(data)
         client_socket.close()
+        self.display_message(f"File {file_name} received successfully.", sender)
 
-        self.display_message(f"File received successfully.", sender)
+
+class Config():
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, config_file='./config.ini'):
+        self.config = configparser.ConfigParser()
+        self.config.read(config_file)
+
+        if os.environ.get('LOCAL') == 'True':
+            self.host = self.config['Local']['client_host']
+            self.message_port = int(self.config['Local']['message_port'])
+            self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
+        else:
+            self.host = self.config['Remote']['client_host']
+            self.message_port = int(self.config['Remote']['message_port'])
+            self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
+        self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
+        self.socket_timeout = int(self.config['Server']['socket_timeout'])
+        self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
+        self.default_chunk_size = int(self.config['Server']['default_chunk_size'])
 
 
 def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
@@ -715,7 +757,7 @@ def config_logging(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(level
         logger.addHandler(console_handler)
 
         args = sys.argv
-        if len(args) >= 1:
+        if len(args) > 1:
             logfilename = args[1] + '-debug.log'
         else:
             logfilename = 'c-debug.log'
@@ -736,7 +778,6 @@ def debug_func(client):
     register_msg = mb.build_register_request(username, password)
     login_msg = mb.build_login_request(username, password)
     connection.send_message(register_msg)
-    time.sleep(1)
     connection.send_message(login_msg)
     CurrentUser.set_username(username)
     client.show_chat_page()
@@ -744,14 +785,15 @@ def debug_func(client):
 
 
 if __name__ == '__main__':
+    config = Config()
     config_logging()
-    if os.environ.get('LOCAL') == 'True':
-        ip_address = '127.0.0.1'
-    else:
-        domain_name = "wdc.zone"
-        ip_address = socket.gethostbyname(domain_name)
+    # if os.environ.get('LOCAL') == 'True':
+    #     ip_address = config.host
+    # else:
+    #     domain_name = 'ecs.wdc.zone'
+    #     ip_address = socket.gethostbyname(domain_name)
     app = QApplication(sys.argv)
-    client = ChatClient(ip_address, 9999)
+    client = ChatClient(config.host, config.message_port)
     client.show()
     if os.environ.get('DEBUG') == 'True':
         debug_func(client)

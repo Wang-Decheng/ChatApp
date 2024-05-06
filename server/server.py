@@ -7,6 +7,7 @@ import logging
 import sys
 import time
 import configparser
+import concurrent.futures
 
 sys.path.append(".")
 from utils import MessageBuilder as mb
@@ -47,31 +48,39 @@ class MessageServer:
     def handle_client(self, client_socket, client_address):
         client_socket.settimeout(self.socket_timeout)
         last_heartbeat_time = datetime.now()
+        config = Config()
+        is_json_format = config.is_json_format
+        default_chunk_size = config.default_chunk_size
         username = None
         while True:
             try:
-                config = Config()
-                is_json_format = config.is_json_format
-                message_json = client_socket.recv(1024).decode('utf-8')
-                message = json.loads(message_json)
-                formatted_json = json.dumps(message, indent=2)
-                if is_json_format == 'True':
-                    logging.debug(f"[Received Message]: {formatted_json}")
-                else:
-                    logging.debug(f"[Received Message]: {message_json}")
-                last_heartbeat_time = datetime.now()
-                type = message['type']
-                if type == 'heartbeat':
-                    MessageServer.send_message(client_socket, mb.build_heartbeat('server'))
-                    if username is None:
-                        username = message['who']
-                        self.user_manager.set_online(username, client_socket)
-                    elif username != message['who']:
-                        self.user_manager.set_offline(username)
-                        username = message['who']
-                        self.user_manager.set_online(username, client_socket)
-                else:
-                    self.messagehandler.handle_message(message, client_socket)
+                if client_socket is None:
+                    raise ConnectionResetError                
+                json_data = client_socket.recv(10 * default_chunk_size).decode('utf-8')
+                if not json_data:
+                    raise ConnectionResetError
+                logging.debug(f"[Received data]: {json_data}")
+                message_json_list = json_data.split('!@#')
+                for message_json in message_json_list[:-1]:
+                    message = json.loads(message_json)
+                    formatted_json = json.dumps(message, indent=2)
+                    if is_json_format == 'True':
+                        logging.debug(f"[Received Message]: {formatted_json}")
+                    else:
+                        logging.debug(f"[Received Message]: {message_json}")
+                    last_heartbeat_time = datetime.now()
+                    type = message['type']
+                    if type == 'heartbeat':
+                        MessageServer.send_message(client_socket, mb.build_heartbeat('server'))
+                        if username is None:
+                            username = message['who']
+                            self.user_manager.set_online(username, client_socket)
+                        elif username != message['who']:
+                            self.user_manager.set_offline(username)
+                            username = message['who']
+                            self.user_manager.set_online(username, client_socket)
+                    else:
+                        self.messagehandler.handle_message(message, client_socket)
             except json.JSONDecodeError as e:
                 logging.error(str(e))
                 client_socket.close()
@@ -105,6 +114,7 @@ class MessageServer:
             logging.debug(f"[Send Message]: {formatted_json}")
         else:
             logging.debug(f"[Send Message]: {message_json}")
+        message_json = message_json + '!@#'
         return client_socket.send(message_json.encode('utf-8'))
 
     def start(self):
@@ -144,9 +154,7 @@ class MessageHandler:
                 case 'delete_account':
                     response = self.handle_delete_account(message['request_data'], message['timestamp'])
                 case 'send_personal_message':
-                    response = self.handle_send_personal_message(
-                        message['request_data'], message['timestamp']
-                    )
+                    response = self.handle_send_personal_message(message['request_data'], message['timestamp'])
                 case 'add_friend':
                     response = self.handle_add_friend(message['request_data'], message['timestamp'])
                 case 'get_friends':
@@ -178,7 +186,6 @@ class MessageHandler:
                     self.file_transfer_server.send_file(file_path, request_data['chunk_size'])
                 time.sleep(0.3)
             self.message_queues.pop(username)
-            
 
     def handle_login(self, request_data, request_timestamp, client_socket):
         username = request_data.get('username')
@@ -292,11 +299,21 @@ class FileTransferServer:
         self.host = configparser.host
         self.port = configparser.file_transfer_port
         self.manager_instance = manager_instance
-
-    def receive_file(self, file_path, chunk_size):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.host, self.port))
-        self.socket.listen(1)
+        self.socket.listen(5)
+    
+    def receive_file(self, file_path, chunk_size):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.__receive_file, file_path, chunk_size)
+            return future.result()
+
+    def send_file(self, file_path, chunk_size):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.__send_file, file_path, chunk_size)
+            return future.result()
+
+    def __receive_file(self, file_path, chunk_size):
         client_socket, client_address = self.socket.accept()
         logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'wb') as f:
@@ -306,14 +323,10 @@ class FileTransferServer:
                     break
                 f.write(data)
         client_socket.close()
-        self.socket.close()
         logging.info(f"File {file_path} received")
         return True
 
-    def send_file(self, file_path, chunk_size=1024):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(1)
+    def __send_file(self, file_path, chunk_size=1024):
         client_socket, client_address = self.socket.accept()
         logging.info(f"Client connected from {client_address[0]}:{client_address[1]}")
         with open(file_path, 'rb') as f:
@@ -338,18 +351,19 @@ class Config:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, config_file='./server/config.ini'):
+    def __init__(self, config_file='./config.ini'):
         self.config = configparser.ConfigParser()
         self.config.read(config_file)
         if os.environ.get('LOCAL'):
-            self.host = self.config['Local']['host']
+            self.host = self.config['Local']['server_host']
             self.message_port = int(self.config['Local']['message_port'])
             self.file_transfer_port = int(self.config['Local']['file_transfer_port'])
         else:
-            self.host = self.config['Remote']['host']
+            self.host = self.config['Remote']['server_host']
             self.message_port = int(self.config['Remote']['message_port'])
             self.file_transfer_port = int(self.config['Remote']['file_transfer_port'])
         self.heartbeat_timeout = int(self.config['Server']['heartbeat_timeout'])
+        self.default_chunk_size = int(self.config['Server']['default_chunk_size'])
         self.socket_timeout = int(self.config['Server']['socket_timeout'])
         self.file_transfer_interval = float(self.config['Server']['file_transfer_interval'])
         self.is_json_format = self.config['Logger']['is_json_format']
